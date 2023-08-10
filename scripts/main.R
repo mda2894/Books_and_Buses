@@ -1,25 +1,28 @@
 # Setup -------------------------------------------------------------------
 
+library(conflicted)
+library(here)
 library(tidyverse)
 library(tidytransit)
-library(igraph)
 library(tidygraph)
 library(ggraph)
 
-setwd("C:/Users/manderson/R/Projects/Books by Bus")
+conflicts_prefer(
+  dplyr::filter
+)
 
 # Data --------------------------------------------------------------------
 
 tarc_feed <- "http://googletransit.ridetarc.org/feed/google_transit.zip"
-tarc_file <- "tarc_gtfs.zip"
+tarc_file <- here("data", "tarc_gtfs.zip")
 
 download.file(tarc_feed, destfile = tarc_file)
 
 tarc_gtfs <- read_gtfs(tarc_file)
-summary(tarc_gtfs)
+# summary(tarc_gtfs)
 
 # create single table with all regular weekday stops and related information
-weekdays <- tarc_gtfs$stop_times %>%
+graph_data <- tarc_gtfs$stop_times %>%
   inner_join(tarc_gtfs$stops) %>%
   inner_join(tarc_gtfs$trips) %>%
   inner_join(tarc_gtfs$routes) %>%
@@ -27,9 +30,10 @@ weekdays <- tarc_gtfs$stop_times %>%
   select(route_id, route_long_name, trip_id, direction_id, trip_headsign,
          stop_sequence, shape_dist_traveled, stop_id, stop_name, arrival_time,
          stop_lat, stop_lon) %>%
-  replace_na(list(shape_dist_traveled = 0))
+  replace_na(list(shape_dist_traveled = 0)) %>%
+  mutate(node_id = paste(trip_id, stop_sequence, sep = "|"))
 
-# # First Test Network ------------------------------------------------------
+# # Testing igraph --------------------------------------------------------
 #
 # # just one trip
 # test_data_1 <- weekdays %>%
@@ -59,8 +63,6 @@ weekdays <- tarc_gtfs$stop_times %>%
 # plot(test_graph_1, layout = layout_in_circle)
 #
 #
-# # Second Test Network -----------------------------------------------------
-#
 # # two trips (same route, opposite directions)
 # test_data_2 <- weekdays %>%
 #   filter(trip_id %in% c(853090, 853092)) %>%
@@ -86,17 +88,16 @@ weekdays <- tarc_gtfs$stop_times %>%
 # print(test_graph_2, full = T)
 # plot(test_graph_2, vertex.label = NA)
 
-# Full Graph --------------------------------------------------------------
+# Trip Graph --------------------------------------------------------------
 
-graph_data <- weekdays %>%
-  mutate(node_id = paste(trip_id, stop_sequence, sep = "|"))
-
-graph_nodes <- graph_data %>%
-  select(node_id, trip_id, stop_sequence, stop_id, stop_name, arrival_time,
-         stop_lat, stop_lon) %>%
+trip_graph_nodes <- graph_data %>%
+  mutate(node_type = "bus_stop") %>%
+  select(node_id, node_type, route_id, route_long_name, trip_id, stop_sequence,
+         stop_id, stop_name, arrival_time, stop_lat, stop_lon) %>%
   arrange(trip_id, stop_sequence)
 
-graph_edges <- graph_data %>%
+# route/trip edges (no transfers)
+trip_graph_edges <- graph_data %>%
   group_by(trip_id) %>%
   arrange(stop_sequence) %>%
   mutate(from = node_id,
@@ -105,10 +106,46 @@ graph_edges <- graph_data %>%
          time = lead(arrival_time) - arrival_time) %>%
   filter(row_number() <= n() - 1) %>%
   ungroup() %>%
-  select(from, to, route_id, route_long_name, trip_id, trip_leg = stop_sequence,
-         direction_id, trip_headsign, distance, time) %>%
+  mutate(edge_type = "bus_trip") %>%
+  select(from, to, edge_type, route_id, route_long_name, trip_id,
+         trip_leg = stop_sequence, direction_id, trip_headsign, distance, time) %>%
   arrange(trip_id, trip_leg)
 
-g1 <- graph_from_data_frame(graph_edges, vertices = graph_nodes, directed = T)
 
-print(g1, full = T)
+# "rooted forest" with each trip a separate tree
+trip_graph <- tbl_graph(trip_graph_nodes, trip_graph_edges, directed = T)
+# print(trip_graph)
+
+# Transfer Graph ----------------------------------------------------------
+
+transfer_graph_nodes <- trip_graph_nodes %>%
+  arrange(stop_id, arrival_time)
+
+transfer_graph_edges <- graph_data %>%
+  group_by(stop_id) %>%
+  arrange(arrival_time) %>%
+  mutate(from = node_id,
+         to = lead(node_id),
+         from_route = route_id,
+         to_route = lead(route_id),
+         distance = 0,
+         time = lead(arrival_time) - arrival_time) %>%
+  filter(row_number() <= n() - 1) %>%
+  ungroup() %>%
+  mutate(edge_type = "transfer") %>%
+  arrange(stop_id, arrival_time) %>%
+  select(from, to, edge_type, stop_id, stop_name, from_route, to_route,
+         distance, time)
+
+transfer_graph <- tbl_graph(transfer_graph_nodes, transfer_graph_edges,
+                            directed = T)
+# print(transfer_graph)
+
+# Bus-Only Graph ----------------------------------------------------------
+
+bus_only_graph <- graph_join(trip_graph, transfer_graph)
+# print(bus_only_graph)
+
+bus_only_graph %>%
+  as_tibble("edges") %>%
+  View()
