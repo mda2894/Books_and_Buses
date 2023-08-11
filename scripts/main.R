@@ -61,7 +61,7 @@ trip_graph_edges <- graph_data %>%
 trip_graph <- tbl_graph(trip_graph_nodes, trip_graph_edges, directed = T)
 # print(trip_graph)
 
-# Transfer Graph ----------------------------------------------------------
+# Add (Same-Stop) Transfers -----------------------------------------------
 
 transfer_graph_nodes <- trip_graph_nodes %>%
   arrange(stop_id, arrival_time)
@@ -83,21 +83,47 @@ transfer_graph <- tbl_graph(transfer_graph_nodes, transfer_graph_edges,
                             directed = T)
 # print(transfer_graph)
 
-# Bus-Only Graph ----------------------------------------------------------
-
 bus_only_graph <- graph_join(trip_graph, transfer_graph)
 # print(bus_only_graph)
+
+# Bus-Only (Forrest Gump) Routing -----------------------------------------
 
 # graph_data %>%
 #   filter(grepl("Mall", stop_name)) %>%
 #   View()
 
+start_nodes <- bus_only_graph %>%
+  activate("nodes") %>%
+  as_tibble() %>%
+  filter(stop_id == 21285) %>% # Jefferson Mall
+  arrange(arrival_time) %>%
+  pull(name)
+
+target_nodes <- bus_only_graph %>%
+  activate("nodes") %>%
+  as_tibble() %>%
+  filter(stop_id == 8290) %>% # St. Matthews Mall
+  arrange(arrival_time) %>%
+  pull(name)
+
+dist_matrix <- distances(bus_only_graph, v = start_nodes, to = target_nodes,
+                         mode = "out")
+min(dist_matrix)
+ind <- arrayInd(which.min(dist_matrix), dim(dist_matrix))
+
+best_start <- rownames(dist_matrix)[ind[,1]]
+best_finish <- colnames(dist_matrix)[ind[,2]]
+
 res <- bus_only_graph %>%
-  shortest_paths(from = "855277-87", to = "855468-130",
+  shortest_paths(from = best_start, to = best_finish,
                  mode = "out", output = "both")
 
-node_list <- names(res$vpath[[1]])
+node_list <- names(Filter(function(x) length(x) > 0, res$vpath)[[1]])
 
 node_path <- graph_data %>%
   filter(node_id %in% node_list) %>%
   arrange(arrival_time)
+
+# Walking Graph? ----------------------------------------------------------
+
+stops <- tarc_gtfs$stops
