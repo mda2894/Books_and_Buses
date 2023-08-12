@@ -1,4 +1,6 @@
-# Setup -------------------------------------------------------------------
+# First Attempt
+
+# Setup ------------------------------------------------------------------
 
 library(conflicted)
 library(here)
@@ -7,12 +9,15 @@ library(tidytransit)
 library(igraph)
 library(tidygraph)
 library(ggraph)
+library(sf)
+library(sftime)
+library(sfnetworks)
 
 conflicts_prefer(
   dplyr::filter
 )
 
-# Data --------------------------------------------------------------------
+# Data -------------------------------------------------------------------
 
 tarc_file <- here("data", "tarc_gtfs.zip")
 
@@ -37,7 +42,7 @@ graph_data <- tarc_gtfs$stop_times %>%
   mutate(node_id = paste(trip_id, stop_sequence, sep = "-")) %>%
   arrange(arrival_time)
 
-# Trip Graph --------------------------------------------------------------
+# Trip Graph -------------------------------------------------------------
 
 # node table for all bus stops
 bus_stops <- graph_data %>%
@@ -62,7 +67,7 @@ trip_graph_edges <- graph_data %>%
 trip_graph <- tbl_graph(bus_stops, trip_graph_edges, directed = T)
 # print(trip_graph)
 
-# Add (Same-Stop) Transfers -----------------------------------------------
+# Transfers --------------------------------------------------------------
 
 # Add "same-stop" transfer edges (i.e. waiting for the next bus)
 transfer_graph_edges <- graph_data %>%
@@ -87,7 +92,7 @@ bus_only_graph <- graph_join(trip_graph, transfer_graph)
 
 rm(trip_graph, trip_graph_edges, transfer_graph, transfer_graph_edges)
 
-# Bus-Only (Forrest Gump) Routing -----------------------------------------
+# Bus-Only (Forrest Gump) Routing ----------------------------------------
 
 # graph_data %>%
 #   filter(grepl("Mall", stop_name)) %>%
@@ -138,11 +143,10 @@ start_node <- graph_data %>%
 all_dist <- distances(bus_only_graph, v = start_node, mode = "out")
 sum(all_dist != Inf)
 
-# Walking Graph -----------------------------------------------------------
+# Walking Graph ----------------------------------------------------------
 
-# Look into sfnetworks (would probably require some rewrites)
 # OSMExtract / OSMData for walking data
 # Tidygraph node_distance_from
 
-# Add Library Nodes -------------------------------------------------------
+# Add Library Nodes ------------------------------------------------------
 
