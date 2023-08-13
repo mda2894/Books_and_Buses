@@ -147,43 +147,42 @@ rm(trip_graph, trip_graph_edges, transfer_graph, transfer_graph_edges)
 # Walking Graph ----------------------------------------------------------
 
 get_walkable_nodes <- function(current, speed = 1, max_dist = 2000,
-                               max_time = 60*60) {
+                               max_time = 60*60, min_time = 60*10) {
+  lat_c <- 111.32 * 1000 # approximate # of meters in one degree latitude
+  lon_c <- 40075 * 1000 * cos(current$stop_lat) / 360 # same for longitude
+
   nearby_stops <- graph_data %>%
-    # calculate "taxi-cab" distance (assuming a grid-like street network)
-    mutate(distance = distHaversine(cbind(current$stop_lon, current$stop_lat),
-                                cbind(current$stop_lon, stop_lat)) +
-                      distHaversine(cbind(current$stop_lon, current$stop_lat),
-                                cbind(stop_lon, current$stop_lat)),
+    # calculate approximate "taxi-cab" distance
+    mutate(distance = abs(current$stop_lat - stop_lat) * lat_c +
+                      abs(current$stop_lon - stop_lon) * lon_c,
            time_diff = stop_time_sec - current$stop_time_sec) %>%
-    filter(distance <= max_dist,           # <= 2 km away
-           stop_id != current$stop_id, # not same stop
-           time_diff > distance / speed,   # can make it there in time
-           time_diff < max_time) %>%    # but less than an hour in the future
+    filter(stop_id != current$stop_id,   # not same stop
+           distance <= max_dist,         # <= 2 km away
+           time_diff > distance / speed, # can make it there in time
+           time_diff < max_time,         # but less than an hour in the future
+           time_diff > min_time) %>%     # at least 10 minutes to make transfer
     group_by(trip_id) %>%
-    arrange(distance) %>%
-    filter(row_number() == 1) %>%      # only closest stop for each trip
+    filter(distance == min(distance)) %>% # closest stop for each trip
     group_by(stop_id) %>%
-    arrange(stop_time_sec) %>%
-    filter(row_number() == 1) %>%      # only the earliest node per stop
+    filter(stop_time_sec == min(stop_time_sec)) %>% # earliest node per stop
     ungroup() %>%
     mutate(from = current$node_id,
            to = node_id,
-           weight = stop_time_sec - current$stop_time_sec,
+           weight = time_diff,
            edge_type = "walking") %>%
     select(from, to, edge_type, weight, distance)
 
   return(nearby_stops)
 }
 
-walking_edges <- tibble()
-
 system.time(
-  for (i in 1:100) {
-    walking_edges <- rbind(walking_edges, get_walkable_nodes(graph_data[i,]))
-  }
+walking_edges <- graph_data %>%
+  select(node_id, stop_id, stop_time_sec, stop_lon, stop_lat) %>%
+  rowwise() %>%
+  mutate(new_edges = pick(everything()) %>% get_walkable_nodes() %>% list()) %>%
+  select(new_edges) %>%
+  unnest(cols = c(new_edges))
 )
-
-# This is really slow (~3 hours). Gotta try to speed this up, or use apply.
 
 # Add Library Nodes ------------------------------------------------------
 
