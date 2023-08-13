@@ -184,5 +184,48 @@ walking_edges <- graph_data %>%
   unnest(cols = c(new_edges))
 )
 
-# Add Library Nodes ------------------------------------------------------
+walking_graph <- tbl_graph(nodes = bus_stops, edges = walking_edges)
 
+bus_and_walk <- graph_join(bus_only_graph, walking_graph)
+
+# Testing the Full Graph --------------------------------------------------
+
+# playing with routing between two random bus stops
+start_nodes <- bus_and_walk %>%
+  activate("nodes") %>%
+  as_tibble() %>%
+  filter(stop_id == 21285) %>% # Jefferson Mall
+  arrange(stop_time_sec) %>%
+  pull(name)
+
+target_nodes <- bus_and_walk %>%
+  activate("nodes") %>%
+  as_tibble() %>%
+  filter(stop_id == 8290) %>% # St. Matthews Mall
+  arrange(stop_time_sec) %>%
+  pull(name)
+
+# find shortest paths between every possible connection between the two stops
+dist_matrix <- distances(bus_and_walk, v = start_nodes, to = target_nodes,
+                         mode = "out")
+min(dist_matrix)
+ind <- arrayInd(which.min(dist_matrix), dim(dist_matrix))
+
+# grab the two nodes that represent the starting and finishing stops
+best_start <- rownames(dist_matrix)[ind[,1]]
+best_finish <- colnames(dist_matrix)[ind[,2]]
+
+# get the full path between the two
+res <- bus_and_walk %>%
+  shortest_paths(from = best_start, to = best_finish,
+                 mode = "out", output = "both")
+
+node_list <- names(Filter(function(x) length(x) > 0, res$vpath)[[1]])
+
+node_path <- graph_data %>%
+  filter(node_id %in% node_list) %>%
+  arrange(stop_time_sec)
+
+# Success! My directions essentially match those given by GoogleMaps
+
+# Add Library Nodes ------------------------------------------------------
