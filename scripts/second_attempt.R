@@ -43,9 +43,22 @@ graph_data <- tarc_gtfs$stop_times %>%
   filter(service_id == 3,
          !grepl("UPS", route_long_name)) %>%
   replace_na(list(shape_dist_traveled = 0)) %>%
-  mutate(node_id = paste(trip_id, stop_sequence, sep = "-")) %>%
-  select(node_id, geometry, stop_time = arrival_time, stop_id, stop_name,
+  mutate(node_id = paste(trip_id, stop_sequence, sep = "-"),
+         stop_time = arrival_time,
+         stop_time_sec = period_to_seconds(hms(stop_time))) %>%
+  select(node_id, geometry, stop_time, stop_time_sec, stop_id, stop_name,
          route_id, route_long_name, trip_id, direction_id, trip_headsign,
          stop_sequence, shape_dist_traveled) %>%
   arrange(stop_time) %>%
   st_sftime(time_column_name = "stop_time", time_column_last = F)
+
+
+
+
+
+
+
+
+# Walking Graph ----------------------------------------------------------
+
+# OSMExtract / OSMData for walking data
