@@ -146,8 +146,8 @@ rm(trip_graph, trip_graph_edges, transfer_graph, transfer_graph_edges)
 
 # Walking Graph ----------------------------------------------------------
 
-get_walkable_nodes <- function(current, speed = 1, dist = 2000, time = 60*60){
-
+get_walkable_nodes <- function(current, speed = 1, max_dist = 2000,
+                               max_time = 60*60) {
   nearby_stops <- graph_data %>%
     # calculate "taxi-cab" distance (assuming a grid-like street network)
     mutate(distance = distHaversine(cbind(current$stop_lon, current$stop_lat),
@@ -155,12 +155,12 @@ get_walkable_nodes <- function(current, speed = 1, dist = 2000, time = 60*60){
                       distHaversine(cbind(current$stop_lon, current$stop_lat),
                                 cbind(stop_lon, current$stop_lat)),
            time_diff = stop_time_sec - current$stop_time_sec) %>%
-    filter(distance <= dist,           # <= 2 km away
+    filter(distance <= max_dist,           # <= 2 km away
            stop_id != current$stop_id, # not same stop
-           time_diff > dist / speed,   # can make it there in time
-           time_diff < time) %>%    # but less than an hour in the future
+           time_diff > distance / speed,   # can make it there in time
+           time_diff < max_time) %>%    # but less than an hour in the future
     group_by(trip_id) %>%
-    arrange(dist) %>%
+    arrange(distance) %>%
     filter(row_number() == 1) %>%      # only closest stop for each trip
     group_by(stop_id) %>%
     arrange(stop_time_sec) %>%
@@ -177,11 +177,13 @@ get_walkable_nodes <- function(current, speed = 1, dist = 2000, time = 60*60){
 
 walking_edges <- tibble()
 
-for (i in 1:nrow(graph_data)) {
-  walking_edges <- rbind(walking_edges, get_walkable_nodes(graph_data[i,]))
-}
+system.time(
+  for (i in 1:100) {
+    walking_edges <- rbind(walking_edges, get_walkable_nodes(graph_data[i,]))
+  }
+)
 
-
+# This is really slow (~3 hours). Gotta try to speed this up, or use apply.
 
 # Add Library Nodes ------------------------------------------------------
 
