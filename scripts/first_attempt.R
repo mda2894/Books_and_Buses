@@ -10,6 +10,7 @@ library(igraph)
 library(tidygraph)
 library(geosphere)
 library(lubridate)
+library(hms)
 
 conflicts_prefer(
   dplyr::filter
@@ -20,7 +21,6 @@ conflicts_prefer(
 tarc_file <- here("data", "tarc_gtfs.zip")
 
 # # uncomment this block to download new TARC GTFS file
-# dir.create(here("data"))
 # tarc_feed <- "http://googletransit.ridetarc.org/feed/google_transit.zip"
 # download.file(tarc_feed, destfile = tarc_file)
 
@@ -144,88 +144,144 @@ rm(trip_graph, trip_graph_edges, transfer_graph, transfer_graph_edges)
 # all_dist <- distances(bus_only_graph, v = start_node, mode = "out")
 # sum(all_dist != Inf)
 
-# Walking Graph ----------------------------------------------------------
-
-get_walkable_nodes <- function(current, speed = 1, max_dist = 2000,
-                               max_time = 60*60, min_time = 60*10) {
-  lat_c <- 111.32 * 1000 # approximate # of meters in one degree latitude
-  lon_c <- 40075 * 1000 * cos(current$stop_lat) / 360 # same for longitude
-
-  nearby_stops <- graph_data %>%
-    # calculate approximate "taxi-cab" distance
-    mutate(distance = abs(current$stop_lat - stop_lat) * lat_c +
-                      abs(current$stop_lon - stop_lon) * lon_c,
-           time_diff = stop_time_sec - current$stop_time_sec) %>%
-    filter(stop_id != current$stop_id,   # not same stop
-           distance <= max_dist,         # <= 2 km away
-           time_diff > distance / speed, # can make it there in time
-           time_diff < max_time,         # but less than an hour in the future
-           time_diff > min_time) %>%     # at least 10 minutes to make transfer
-    group_by(trip_id) %>%
-    filter(distance == min(distance)) %>% # closest stop for each trip
-    group_by(stop_id) %>%
-    filter(stop_time_sec == min(stop_time_sec)) %>% # earliest node per stop
-    ungroup() %>%
-    mutate(from = current$node_id,
-           to = node_id,
-           weight = time_diff,
-           edge_type = "walking") %>%
-    select(from, to, edge_type, weight, distance)
-
-  return(nearby_stops)
-}
-
-system.time(
-walking_edges <- graph_data %>%
-  select(node_id, stop_id, stop_time_sec, stop_lon, stop_lat) %>%
-  rowwise() %>%
-  mutate(new_edges = pick(everything()) %>% get_walkable_nodes() %>% list()) %>%
-  select(new_edges) %>%
-  unnest(cols = c(new_edges))
-)
-
-walking_graph <- tbl_graph(nodes = bus_stops, edges = walking_edges)
-
-bus_and_walk <- graph_join(bus_only_graph, walking_graph)
-
-# Testing the Full Graph --------------------------------------------------
-
-# playing with routing between two random bus stops
-start_nodes <- bus_and_walk %>%
-  activate("nodes") %>%
-  as_tibble() %>%
-  filter(stop_id == 21285) %>% # Jefferson Mall
-  arrange(stop_time_sec) %>%
-  pull(name)
-
-target_nodes <- bus_and_walk %>%
-  activate("nodes") %>%
-  as_tibble() %>%
-  filter(stop_id == 8290) %>% # St. Matthews Mall
-  arrange(stop_time_sec) %>%
-  pull(name)
-
-# find shortest paths between every possible connection between the two stops
-dist_matrix <- distances(bus_and_walk, v = start_nodes, to = target_nodes,
-                         mode = "out")
-min(dist_matrix)
-ind <- arrayInd(which.min(dist_matrix), dim(dist_matrix))
-
-# grab the two nodes that represent the starting and finishing stops
-best_start <- rownames(dist_matrix)[ind[,1]]
-best_finish <- colnames(dist_matrix)[ind[,2]]
-
-# get the full path between the two
-res <- bus_and_walk %>%
-  shortest_paths(from = best_start, to = best_finish,
-                 mode = "out", output = "both")
-
-node_list <- names(Filter(function(x) length(x) > 0, res$vpath)[[1]])
-
-node_path <- graph_data %>%
-  filter(node_id %in% node_list) %>%
-  arrange(stop_time_sec)
-
-# Success! My directions essentially match those given by GoogleMaps
+# # Walking Graph ----------------------------------------------------------
+#
+# get_walkable_nodes <- function(current, speed = 1, max_dist = 2000,
+#                                max_time = 60*60, min_time = 60*10) {
+#   lat_c <- 111.32 * 1000 # approximate # of meters in one degree latitude
+#   lon_c <- 40075 * 1000 * cos(current$stop_lat) / 360 # same for longitude
+#
+#   nearby_stops <- graph_data %>%
+#     # calculate approximate "taxi-cab" distance
+#     mutate(distance = abs(current$stop_lat - stop_lat) * lat_c +
+#                       abs(current$stop_lon - stop_lon) * lon_c,
+#            time_diff = stop_time_sec - current$stop_time_sec) %>%
+#     filter(stop_id != current$stop_id,   # not same stop
+#            distance <= max_dist,         # <= 2 km away
+#            time_diff > distance / speed, # can make it there in time
+#            time_diff < max_time,         # but less than an hour in the future
+#            time_diff > min_time) %>%     # at least 10 minutes to make transfer
+#     group_by(trip_id) %>%
+#     filter(distance == min(distance)) %>% # closest stop for each trip
+#     group_by(stop_id) %>%
+#     filter(stop_time_sec == min(stop_time_sec)) %>% # earliest node per stop
+#     ungroup() %>%
+#     mutate(from = current$node_id,
+#            to = node_id,
+#            weight = time_diff,
+#            edge_type = "walking") %>%
+#     select(from, to, edge_type, weight, distance)
+#
+#   return(nearby_stops)
+# }
+#
+# system.time(
+# walking_edges <- graph_data %>%
+#   select(node_id, stop_id, stop_time_sec, stop_lon, stop_lat) %>%
+#   rowwise() %>%
+#   mutate(new_edges = pick(everything()) %>% get_walkable_nodes() %>% list()) %>%
+#   select(new_edges) %>%
+#   unnest(cols = c(new_edges))
+# )
+#
+# walking_graph <- tbl_graph(nodes = bus_stops, edges = walking_edges)
+#
+# bus_and_walk <- graph_join(bus_only_graph, walking_graph)
+#
+# # Testing the Full Graph --------------------------------------------------
+#
+# # playing with routing between two random bus stops
+# start_nodes <- bus_and_walk %>%
+#   activate("nodes") %>%
+#   as_tibble() %>%
+#   filter(stop_id == 21285) %>% # Jefferson Mall
+#   arrange(stop_time_sec) %>%
+#   pull(name)
+#
+# target_nodes <- bus_and_walk %>%
+#   activate("nodes") %>%
+#   as_tibble() %>%
+#   filter(stop_id == 8290) %>% # St. Matthews Mall
+#   arrange(stop_time_sec) %>%
+#   pull(name)
+#
+# # find shortest paths between every possible connection between the two stops
+# dist_matrix <- distances(bus_and_walk, v = start_nodes, to = target_nodes,
+#                          mode = "out")
+# min(dist_matrix)
+# ind <- arrayInd(which.min(dist_matrix), dim(dist_matrix))
+#
+# # grab the two nodes that represent the starting and finishing stops
+# best_start <- rownames(dist_matrix)[ind[,1]]
+# best_finish <- colnames(dist_matrix)[ind[,2]]
+#
+# # get the full path between the two
+# res <- bus_and_walk %>%
+#   shortest_paths(from = best_start, to = best_finish,
+#                  mode = "out", output = "both")
+#
+# node_list <- names(Filter(function(x) length(x) > 0, res$vpath)[[1]])
+#
+# node_path <- graph_data %>%
+#   filter(node_id %in% node_list) %>%
+#   arrange(stop_time_sec)
+#
+# # Success! My directions essentially match those given by GoogleMaps
 
 # Add Library Nodes ------------------------------------------------------
+
+# (DONE) Compile list of library coords
+# (DONE) Select the closest 25 stops to each library, based on walk distance
+# (DONE) Limit to just the closest stop for every trip
+# (DONE) Filter out stops too far away to walk to (3K)
+# Connect each stop to its library, using walk time
+# Connect each library to each of its stops, walk time + T (10?) minutes inside
+
+library_data <- here("data", "library_coords.csv") %>%
+  read_csv()
+
+taxicab_dist <- function(lon1, lon2, lat1, lat2) {
+  lat_c <- 111.32 * 1000 # approximate # of meters in one degree latitude
+  lon_c <- 40075 * 1000 * cos(lat1) / 360 # same for longitude
+  return(abs(lat1 - lat2) * lat_c + abs(lon1 - lon2) * lon_c)
+}
+
+library_stops <- tibble()
+
+for (i in 1:nrow(library_data)) {
+  closest_stops <- graph_data %>%
+    select(stop_id, stop_name, stop_lat, stop_lon) %>%
+    unique() %>%
+    mutate(library = library_data$library_name[i],
+           library_lat = library_data$library_lat[i],
+           library_lon = library_data$library_lon[i],
+           dist = taxicab_dist(library_lon, stop_lon,
+                               library_lat, stop_lat)) %>%
+    arrange(dist) %>%
+    filter(row_number() <= 25) %>%
+    left_join(bus_stops) %>%
+    group_by(trip_id) %>%
+    filter(dist == min(dist)) %>%
+    ungroup() %>%
+    filter(dist < 3000)
+
+  library_stops <- rbind(library_stops, closest_stops)
+}
+
+# lib_stats <- library_stops %>%
+#   count(library, route_id, direction_id, stop_id, stop_name, dist)
+
+library_nodes <- library_stops %>%
+  group_by(library) %>%
+  mutate(name = paste(library, row_number(), sep = "-"),
+         node_type = "library",
+         arrival_time = as_hms(stop_time + as.duration(round(dist))),
+         arrival_time_sec = stop_time_sec + round(dist)) %>% # 1 m/s
+  ungroup() %>%
+  select(name, node_type, library, arrival_time, arrival_time_sec,
+         node_lat = library_lat, node_lon = library_lon)
+
+
+
+select(name = node_id, node_type, route_id, trip_id, direction_id,
+       stop_sequence, stop_id, stop_time, stop_time_sec, stop_lat, stop_lon)
