@@ -94,6 +94,21 @@
       ],
       "Hash": "ae6cbbe1492f4de79c45fce06f967ce8"
     },
+    "TSP": {
+      "Package": "TSP",
+      "Version": "1.2-4",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "foreach",
+        "grDevices",
+        "graphics",
+        "stats",
+        "utils"
+      ],
+      "Hash": "7fba3f587b0f3cb3232d03d540dbf772"
+    },
     "askpass": {
       "Package": "askpass",
       "Version": "1.1",
@@ -286,6 +301,16 @@
         "utils"
       ],
       "Hash": "3f038e5ac7f41d4ac41ce658c85e3042"
+    },
+    "codetools": {
+      "Package": "codetools",
+      "Version": "0.2-19",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Requirements": [
+        "R"
+      ],
+      "Hash": "c089a619a7fae175d149d89164f8c7d8"
     },
     "colorspace": {
       "Package": "colorspace",
@@ -527,6 +552,19 @@
       ],
       "Hash": "1a0a9a3d5083d0d573c4214576f1e690"
     },
+    "foreach": {
+      "Package": "foreach",
+      "Version": "1.5.2",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "codetools",
+        "iterators",
+        "utils"
+      ],
+      "Hash": "618609b42c9406731ead03adf5379850"
+    },
     "fs": {
       "Package": "fs",
       "Version": "1.6.3",
@@ -587,6 +625,18 @@
         "Rcpp"
       ],
       "Hash": "122e8341ead01f3746dd312ecc5ffd28"
+    },
+    "geosphere": {
+      "Package": "geosphere",
+      "Version": "1.5-18",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "Rcpp",
+        "sp"
+      ],
+      "Hash": "45aa4def70a402e7d20efde490c13ecb"
     },
     "ggplot2": {
       "Package": "ggplot2",
@@ -834,6 +884,17 @@
         "utils"
       ],
       "Hash": "0080607b4a1a7b28979aecef976d8bc2"
+    },
+    "iterators": {
+      "Package": "iterators",
+      "Version": "1.0.14",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "utils"
+      ],
+      "Hash": "8954069286b4b2b0d023d1b288dce978"
     },
     "jquerylib": {
       "Package": "jquerylib",
@@ -1439,6 +1500,23 @@
         "sf"
       ],
       "Hash": "9ad28dee2634035886a81680fcd80a30"
+    },
+    "sp": {
+      "Package": "sp",
+      "Version": "2.0-0",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "grDevices",
+        "graphics",
+        "grid",
+        "lattice",
+        "methods",
+        "stats",
+        "utils"
+      ],
+      "Hash": "2551981e6f85d59c81652bf654d6c3ca"
     },
     "stringi": {
       "Package": "stringi",
