@@ -588,18 +588,6 @@
       ],
       "Hash": "122e8341ead01f3746dd312ecc5ffd28"
     },
-    "geosphere": {
-      "Package": "geosphere",
-      "Version": "1.5-18",
-      "Source": "Repository",
-      "Repository": "RSPM",
-      "Requirements": [
-        "R",
-        "Rcpp",
-        "sp"
-      ],
-      "Hash": "45aa4def70a402e7d20efde490c13ecb"
-    },
     "ggplot2": {
       "Package": "ggplot2",
       "Version": "3.4.2",
@@ -1451,23 +1439,6 @@
         "sf"
       ],
       "Hash": "9ad28dee2634035886a81680fcd80a30"
-    },
-    "sp": {
-      "Package": "sp",
-      "Version": "2.0-0",
-      "Source": "Repository",
-      "Repository": "RSPM",
-      "Requirements": [
-        "R",
-        "grDevices",
-        "graphics",
-        "grid",
-        "lattice",
-        "methods",
-        "stats",
-        "utils"
-      ],
-      "Hash": "2551981e6f85d59c81652bf654d6c3ca"
     },
     "stringi": {
       "Package": "stringi",
