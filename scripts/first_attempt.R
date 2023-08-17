@@ -522,20 +522,20 @@ rm(a, b, i, j, k, col_list)
 
 NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 2*M
 
-books_and_buses <- ATSP(NB_dist_matrix)
+books_and_buses <- ATSP(NB_dist_matrix) %>%
+  insert_dummy(const = 1.5 * M)
 
 start_node <- which(library_nodes == "Main-1-in")
 
 set.seed(2894)
 tour <- solve_TSP(books_and_buses, method = "repetitive_nn")
-tour_length(tour)
+tour_duration <- tour_length(tour) %% M
 
 route <- tour %>%
-  data.frame() %>%
-  rownames_to_column()
+  as_tibble(rownames = "node")
 
 order <- route %>%
-  pull(rowname) %>%
+  pull(node) %>%
   str_split(pattern = "-") %>%
   as_tibble_col() %>%
   rowwise() %>%
@@ -543,5 +543,35 @@ order <- route %>%
   select(library) %>%
   distinct()
 
-# doesn't seem possible using any of the simple heuristics in the TSP package
-# might need to look into the Concorde solvers or try finding a manual example
+cost <- rep(NA, N)
+
+for (i in 1:(N - 1)) {
+  cost[i] <- NB_dist_matrix[tour[i], tour[i + 1]]
+}
+
+route <- route %>%
+  cbind(cost) %>%
+  mutate(start = node, finish = lead(node)) %>%
+  select(start, finish, cost) %>%
+  filter(cost != 0)
+
+route_nodes <- c("Southwest-26-in", route$finish)
+
+route_info <- full_graph %>%
+  activate("nodes") %>%
+  as_tibble() %>%
+  filter(name %in% route_nodes) %>%
+  mutate(arrival_time = hms::hms(arrival_time)) %>%
+  arrange(arrival_time)
+
+# seems like a plausible route for secondary goal!
+# still want to try Concorde solvers and more advanced routing calculations
+
+res <- shortest_paths(full_graph, from = route_info$name[1], to = route_info$name[2])
+node_list <- names(Filter(function(x) length(x) > 0, res$vpath)[[1]])
+
+node_path <- full_graph %>%
+  activate("nodes") %>%
+  as_tibble() %>%
+  filter(name %in% node_list) %>%
+  arrange(arrival_time)
