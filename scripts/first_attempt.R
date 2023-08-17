@@ -13,7 +13,8 @@ library(lubridate)
 library(TSP)
 
 conflicts_prefer(
-  dplyr::filter
+  dplyr::filter,
+  dplyr::lag
 )
 
 # Data -------------------------------------------------------------------
@@ -148,7 +149,7 @@ rm(trip_graph, trip_graph_edges, transfer_graph, transfer_graph_edges)
 # rm(all_dist, dist_matrix, ind, node_list, node_path, res, start_node,
 #    start_nodes, target_nodes)
 
-# # Walking Graph ----------------------------------------------------------
+# # Walking Graph -----------------------------------------------------------
 
 taxicab_dist <- function(lon1, lon2, lat1, lat2) {
   lat_c <- 111.32 * 1000 # approximate # of meters in one degree latitude
@@ -156,43 +157,43 @@ taxicab_dist <- function(lon1, lon2, lat1, lat2) {
   return(abs(lat1 - lat2) * lat_c + abs(lon1 - lon2) * lon_c)
 }
 
-# get_walkable_nodes <- function(current, speed = 1, max_dist = 2000,
-#                                max_time = 60*60, min_time = 60*10) {
-#   lat_c <- 111.32 * 1000 # approximate # of meters in one degree latitude
-#   lon_c <- 40075 * 1000 * cos(current$node_lat) / 360 # same for longitude
-#
-#   nearby_stops <- graph_data %>%
-#     # calculate approximate "taxi-cab" distance
-#     mutate(distance = taxicab_dist(current$node_lon, node_lon,
-#                                    current$node_lat, node_lat),
-#            time_diff = arrival_time - current$arrival_time) %>%
-#     filter(stop_id != current$stop_id,   # not same stop
-#            distance <= max_dist,         # <= 2 km away
-#            time_diff > distance / speed, # can make it there in time
-#            time_diff < max_time,         # but less than an hour in the future
-#            time_diff > min_time) %>%     # at least 10 minutes to make transfer
-#     group_by(trip_id) %>%
-#     filter(distance == min(distance)) %>% # closest stop for each trip
-#     group_by(stop_id) %>%
-#     filter(arrival_time == min(arrival_time)) %>% # earliest node per stop
-#     ungroup() %>%
-#     mutate(from = current$node_id,
-#            to = node_id,
-#            weight = time_diff,
-#            edge_type = "walking") %>%
-#     select(from, to, edge_type, weight, distance)
-#
-#   return(nearby_stops)
-# }
-#
-# system.time(
+get_walkable_nodes <- function(current, speed = 1.5, max_dist = 2000,
+                               max_time = 60*60, min_time = 60*10) {
+  lat_c <- 111.32 * 1000 # approximate # of meters in one degree latitude
+  lon_c <- 40075 * 1000 * cos(current$node_lat) / 360 # same for longitude
+
+  nearby_stops <- graph_data %>%
+    # calculate approximate "taxi-cab" distance
+    mutate(distance = taxicab_dist(current$node_lon, node_lon,
+                                   current$node_lat, node_lat),
+           time_diff = arrival_time - current$arrival_time) %>%
+    filter(stop_id != current$stop_id,   # not same stop
+           distance <= max_dist,         # <= 2 km away
+           time_diff > distance / speed, # can make it there in time
+           time_diff < max_time,         # but less than an hour in the future
+           time_diff > min_time) %>%     # at least 10 minutes to make transfer
+    group_by(trip_id) %>%
+    filter(distance == min(distance)) %>% # closest stop for each trip
+    group_by(stop_id) %>%
+    filter(arrival_time == min(arrival_time)) %>% # earliest node per stop
+    ungroup() %>%
+    mutate(from = current$node_id,
+           to = node_id,
+           weight = time_diff,
+           edge_type = "walking") %>%
+    select(from, to, edge_type, weight, distance)
+
+  return(nearby_stops)
+}
+
+# system.time({
 # walking_edges <- graph_data %>%
 #   select(node_id, stop_id, arrival_time, node_lon, node_lat) %>%
 #   rowwise() %>%
 #   mutate(new_edges = pick(everything()) %>% get_walkable_nodes() %>% list()) %>%
 #   select(new_edges) %>%
 #   unnest(cols = c(new_edges))
-# )
+# })
 #
 # write_csv(walking_edges, here("data", "walking_edges.csv"))
 
@@ -204,7 +205,7 @@ bus_and_walk <- graph_join(bus_only_graph, walking_graph)
 
 rm(walking_edges, walking_graph, bus_only_graph)
 
-# # Testing the Bus and Walk Graph --------------------------------------------------
+# # Testing the Bus and Walk Graph ------------------------------------------
 #
 # # playing with routing between two random bus stops
 # start_nodes <- bus_and_walk %>%
@@ -298,10 +299,12 @@ stop_nodes <- library_data %>%
   select(name, node_type, route_id, trip_id, direction_id,
          stop_sequence, stop_id, arrival_time, node_lat, node_lon)
 
+speed <- 1.5 # m/s
+
 library_in_nodes <- library_data %>%
   mutate(name = paste(library_id, "in", sep = "-"),
          node_type = "library_in",
-         arrival_time = arrival_time + round(dist)) %>% # 1 m/s
+         arrival_time = arrival_time + round(dist / speed)) %>%
   select(name, node_type, library, arrival_time, node_lat = library_lat,
          node_lon = library_lon) %>%
   arrange(library, arrival_time)
@@ -309,7 +312,7 @@ library_in_nodes <- library_data %>%
 library_out_nodes <- library_data %>%
   mutate(node_type = "library_out",
          arrival_time = if_else(lead(library) == library,
-                                lead(arrival_time) - round(lead(dist)),
+                                lead(arrival_time) - round(lead(dist) / speed),
                                 NA),
          name = if_else(!is.na(arrival_time),
                         paste(lead(library_id), "out", sep = "-"),
@@ -348,7 +351,7 @@ library_waiting_edges <- library_out_nodes %>%
 library_busy_edges <- library_in_nodes %>%
   rowwise() %>%
   mutate(to = library_out_nodes$name[library_out_nodes$library == library &
-                                       library_out_nodes$arrival_time > arrival_time + 600][1]) %>%
+                                       library_out_nodes$arrival_time > arrival_time][1]) %>%
   ungroup() %>%
   left_join(library_out_nodes, by = join_by(to == name)) %>%
   mutate(weight = arrival_time.y - arrival_time.x,
@@ -372,7 +375,8 @@ full_graph <- graph_join(bus_and_walk, library_graph)
 
 rm(bus_and_walk, library_busy_edges, library_coords, library_data, library_edges,
    library_in_nodes, library_incoming_edges, library_nodes, library_out_nodes,
-   library_outgoing_edges, library_waiting_edges, library_graph, stop_nodes)
+   library_outgoing_edges, library_waiting_edges, library_graph, stop_nodes,
+   speed, library_stats)
 
 # Testing Full Graph ------------------------------------------------------
 
@@ -448,6 +452,7 @@ rm(bus_and_walk, library_busy_edges, library_coords, library_data, library_edges
 
 # TSP ---------------------------------------------------------------------
 
+# Pull distance matrix between all library-in nodes
 library_nodes <- full_graph %>%
   activate("nodes") %>%
   as_tibble() %>%
@@ -455,21 +460,88 @@ library_nodes <- full_graph %>%
   arrange(library, arrival_time) %>%
   pull(name)
 
-system.time(
+library_indices <- full_graph %>%
+  activate("nodes") %>%
+  as_tibble() %>%
+  filter(node_type == "library_in") %>%
+  arrange(library, arrival_time) %>%
+  count(library) %>%
+  mutate(end = cumsum(n),
+         start = if_else(row_number() == 1, 1, lag(end) + 1)) %>%
+  select(library, start, end)
+
+system.time({
   dist_matrix <- full_graph %>%
     distances(v = library_nodes, to = library_nodes, mode = "out")
-)
+})
 
 dist_matrix[dist_matrix == 0] <- Inf
 
+# Noon-Bean Transformation for Generalized TSP
+#
+# See Ben-Arieh, et al. "Transformations of generalized ATSP into ATSP" (2003)
+# for details on this transformation (and others)
+
 max(dist_matrix[!is.infinite(dist_matrix)]) * nrow(dist_matrix)
 
-# Noon-Bean Transformation for Generalized TSP
-
+num_libs <- nrow(library_indices)
 N <- nrow(dist_matrix)
-M <- 1000000000 # arbitrarily large "penalty" constant > max(D)*N
+M <- 1e9 # arbitrarily large "penalty" constant > max(D)*N
 
-NB_dist_matrix <- matrix(2*M, nrow = N, ncol = N,
-                         dimnames = dimnames(dist_matrix))
+# add penalty to all edges (will only affect inter-cluster edges in the end)
+NB_dist_matrix <- (dist_matrix + M)
 
+for (i in 1:num_libs) {
+  a <- library_indices$start[i]
+  b <- library_indices$end[i]
 
+  # clear all intra-cluster edges
+  NB_dist_matrix[a:b, a:b] <- Inf
+
+  # create intra-cluster cycle of weight 0
+  NB_dist_matrix[b, a] <- 0
+  for (j in a:(b - 1)) {
+    NB_dist_matrix[j, j + 1] <- 0
+  }
+
+  col_list <- c()
+  if (i < num_libs) {
+    col_list <- c((b + 1):N, col_list)
+  } else if (i > 1) {
+    col_list <- c(1:(a - 1), col_list)
+  }
+
+  # shift all inter_cluster edges to account for intra-cluster cycle
+  for (k in col_list) {
+    NB_dist_matrix[a:b, k] <- lead(NB_dist_matrix[a:b, k],
+                                  default = NB_dist_matrix[a, k])
+  }
+}
+
+rm(a, b, i, j, k, col_list)
+
+NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 2*M
+
+books_and_buses <- ATSP(NB_dist_matrix)
+
+start_node <- which(library_nodes == "Main-1-in")
+
+set.seed(2894)
+tour <- solve_TSP(books_and_buses, method = "repetitive_nn")
+tour_length(tour)
+
+route <- tour %>%
+  data.frame() %>%
+  rownames_to_column()
+
+order <- route %>%
+  pull(rowname) %>%
+  str_split(pattern = "-") %>%
+  as_tibble_col() %>%
+  rowwise() %>%
+  mutate(library = first(value)) %>%
+  select(library) %>%
+  distinct()
+
+# doesn't seem possible using any of the simple heuristics in the TSP package
+# might need to look into the Concorde solvers or try finding a manual example
