@@ -525,14 +525,17 @@ NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 2*M
 books_and_buses <- ATSP(NB_dist_matrix) %>%
   insert_dummy(const = 1.5 * M)
 
-start_node <- which(library_nodes == "Main-1-in")
+# start_node <- which(library_nodes == "Main-1-in")
 
 set.seed(2894)
 tour <- solve_TSP(books_and_buses, method = "repetitive_nn")
-tour_duration <- tour_length(tour) %% M
+tour_duration <- tour_length(tour) %% 0.5 * M
 
 route <- tour %>%
-  as_tibble(rownames = "node")
+  as_tibble(rownames = "node") %>%
+  filter(node != "dummy")
+
+start_node <- first(route$node)
 
 order <- route %>%
   pull(node) %>%
@@ -555,7 +558,7 @@ route <- route %>%
   select(start, finish, cost) %>%
   filter(cost != 0)
 
-route_nodes <- c("Southwest-26-in", route$finish)
+route_nodes <- c(start_node, route$finish)
 
 route_info <- full_graph %>%
   activate("nodes") %>%
@@ -564,14 +567,43 @@ route_info <- full_graph %>%
   mutate(arrival_time = hms::hms(arrival_time)) %>%
   arrange(arrival_time)
 
-# seems like a plausible route for secondary goal!
-# still want to try Concorde solvers and more advanced routing calculations
+# seems like a plausible route for the secondary goal!
 
-res <- shortest_paths(full_graph, from = route_info$name[1], to = route_info$name[2])
-node_list <- names(Filter(function(x) length(x) > 0, res$vpath)[[1]])
+node_list <- c()
+
+start_node <- full_graph %>%
+  activate("nodes") %>%
+  as_tibble() %>%
+  filter(library == route_info$library[1],
+         node_type == "library_in") %>%
+  pull(name) %>%
+  first()
+
+for (i in 1:(num_libs - 1)) {
+  target_nodes <- full_graph %>%
+    activate("nodes") %>%
+    as_tibble() %>%
+    filter(library == route_info$library[i + 1],
+           node_type == "library_in") %>%
+    pull(name)
+
+  res <- full_graph %>%
+    shortest_paths(from = start_node, to = target_nodes,
+                   mode = "out", output = "both")
+
+  node_list <- c(node_list,
+                 names(Filter(function(x) length(x) > 0, res$vpath)[[1]]))
+
+  start_node <- last(node_list)
+}
 
 node_path <- full_graph %>%
   activate("nodes") %>%
   as_tibble() %>%
   filter(name %in% node_list) %>%
   arrange(arrival_time)
+
+# still want to try:
+# Concorde solvers
+# better graph/network packages
+# more realistic route time calculations
