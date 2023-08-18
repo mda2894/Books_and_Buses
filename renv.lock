@@ -1098,6 +1098,21 @@
       ],
       "Hash": "273a6bb4a9844c296a459d2176673270"
     },
+    "osmextract": {
+      "Package": "osmextract",
+      "Version": "0.5.0",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "httr",
+        "jsonlite",
+        "sf",
+        "tools",
+        "utils"
+      ],
+      "Hash": "325765c4927551138994b1722d6094fc"
+    },
     "pillar": {
       "Package": "pillar",
       "Version": "1.9.0",
