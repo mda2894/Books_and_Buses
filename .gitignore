@@ -50,3 +50,6 @@ rsconnect/
 
 # Tarc Data
 data/tarc_gtfs.zip
+
+# Software
+/software

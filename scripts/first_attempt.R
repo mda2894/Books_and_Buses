@@ -536,174 +536,178 @@ NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
 
 books_and_buses <- ATSP(NB_dist_matrix)
 
-start_node <- which(library_nodes == "Main-1-in")
+# start_node <- which(library_nodes == "Main-1-in")
+#
+# system.time({
+#   tour <- solve_TSP(books_and_buses, method = "nn", start = start_node)
+# })
+# tour_duration <- tour_length(tour) %% M
+#
+# route <- tour %>%
+#   as_tibble(rownames = "node") %>%
+#   filter(node != "dummy")
+#
+# start_node <- first(route$node)
+#
+# order <- route %>%
+#   pull(node) %>%
+#   str_split(pattern = "-") %>%
+#   as_tibble_col() %>%
+#   rowwise() %>%
+#   mutate(library = first(value)) %>%
+#   select(library) %>%
+#   distinct()
+#
+# cost <- rep(NA, N)
+#
+# for (i in 1:(N - 1)) {
+#   cost[i] <- NB_dist_matrix[tour[i], tour[i + 1]]
+# }
+#
+# route <- route %>%
+#   cbind(cost) %>%
+#   mutate(start = node, finish = lead(node)) %>%
+#   select(start, finish, cost) %>%
+#   filter(cost != 0)
+#
+# route_nodes <- c(start_node, route$finish)
+#
+# route_info <- full_nodes %>%
+#   filter(name %in% route_nodes) %>%
+#   mutate(arrival_time_sec = hms::hms(arrival_time_sec)) %>%
+#   arrange(arrival_time_sec)
+#
+# rm(order, route, cost, dummy, i, route_nodes, start_node,
+#    dist_matrix, NB_dist_matrix, tour_duration)
+#
+# # seems like a plausible route for the secondary goal!
+#
+# node_list <- c()
+#
+# start_node <- full_nodes %>%
+#   filter(library == route_info$library[1],
+#          node_type == "library_in") %>%
+#   pull(name) %>%
+#   first()
+#
+# for (i in 1:(L - 1)) {
+#   target_nodes <- full_nodes %>%
+#     filter(library == route_info$library[i + 1],
+#            node_type == "library_in") %>%
+#     pull(name)
+#
+#   res <- full_graph %>%
+#     shortest_paths(from = start_node, to = target_nodes,
+#                    mode = "out", output = "both")
+#
+#   node_list <- c(node_list,
+#                  names(Filter(function(x) length(x) > 0, res$vpath)[[1]]))
+#
+#   start_node <- last(node_list)
+# }
+#
+# node_path <- full_nodes %>%
+#   filter(name %in% node_list) %>%
+#   arrange(arrival_time_sec)
+#
+# (last(node_path$arrival_time) - first(node_path$arrival_time)) %>%
+#   seconds_to_period() %>%
+#   hms::hms() %>%
+#   print()
+#
+# rm(node_list, start_node, i, target_nodes, M, route_info, res,
+#    library_indices, tour)
 
-system.time({
-  tour <- solve_TSP(books_and_buses, method = "nn", start = start_node)
-})
-tour_duration <- tour_length(tour) %% M
+# # Testing TSP Solutions ---------------------------------------------------
+#
+# system.time({
+# all_routes <- library_nodes %>%
+#   as_tibble() %>%
+#   mutate(row = row_number()) %>%
+#   rowwise() %>%
+#   mutate(raw_length = books_and_buses %>%
+#            solve_TSP(method = "nn", start = row) %>%
+#            tour_length())
+# })
+#
+# feasible_routes <- all_routes %>%
+#   filter(raw_length < 1e9) %>%
+#   mutate(length = raw_length - 116e6) %>%
+#   select(start_node = value, length) %>%
+#   arrange(length)
+#
+# tour <- solve_TSP(books_and_buses, method = "nn",
+#                   start = which(library_nodes == feasible_routes$start_node[1]))
+# tour_length(tour)
+#
+# route <- tour %>%
+#   as_tibble(rownames = "node") %>%
+#   filter(node != "dummy")
+#
+# start_node <- first(route$node)
+#
+# order <- route %>%
+#   pull(node) %>%
+#   str_split(pattern = "-") %>%
+#   as_tibble_col() %>%
+#   rowwise() %>%
+#   mutate(library = first(value)) %>%
+#   select(library) %>%
+#   distinct()
+#
+# cost <- rep(NA, N)
+#
+# for (i in 1:(N - 1)) {
+#   cost[i] <- NB_dist_matrix[tour[i], tour[i + 1]]
+# }
+#
+# route <- route %>%
+#   cbind(cost) %>%
+#   mutate(start = node, finish = lead(node)) %>%
+#   select(start, finish, cost) %>%
+#   filter(cost != 0)
+#
+# route_nodes <- c(start_node, route$finish)
+#
+# route_info <- full_nodes %>%
+#   filter(name %in% route_nodes) %>%
+#   arrange(arrival_time_sec)
+#
+# node_list <- c()
+#
+# start_node <- route_info$name[1]
+#
+# for (i in 1:(L - 1)) {
+#   target_nodes <- full_nodes %>%
+#     filter(library == route_info$library[i + 1],
+#            node_type == "library_in") %>%
+#     pull(name)
+#
+#   res <- full_graph %>%
+#     shortest_paths(from = start_node, to = target_nodes,
+#                    mode = "out", output = "both")
+#
+#   node_list <- c(node_list,
+#                  names(Filter(function(x) length(x) > 0, res$vpath)[[1]]))
+#
+#   start_node <- last(node_list)
+# }
+#
+# node_path <- full_nodes %>%
+#   filter(name %in% node_list) %>%
+#   arrange(arrival_time_sec)
+#
+# (last(node_path$arrival_time) - first(node_path$arrival_time)) %>%
+#   seconds_to_period() %>%
+#   hms::hms() %>%
+#   print()
 
-route <- tour %>%
-  as_tibble(rownames = "node") %>%
-  filter(node != "dummy")
+# Concorde Solvers? -------------------------------------------------------
 
-start_node <- first(route$node)
+concorde_path(here("software"))
 
-order <- route %>%
-  pull(node) %>%
-  str_split(pattern = "-") %>%
-  as_tibble_col() %>%
-  rowwise() %>%
-  mutate(library = first(value)) %>%
-  select(library) %>%
-  distinct()
+books_and_buses_tsp <- books_and_buses %>%
+  reformulate_ATSP_as_TSP()
 
-cost <- rep(NA, N)
-
-for (i in 1:(N - 1)) {
-  cost[i] <- NB_dist_matrix[tour[i], tour[i + 1]]
-}
-
-route <- route %>%
-  cbind(cost) %>%
-  mutate(start = node, finish = lead(node)) %>%
-  select(start, finish, cost) %>%
-  filter(cost != 0)
-
-route_nodes <- c(start_node, route$finish)
-
-route_info <- full_nodes %>%
-  filter(name %in% route_nodes) %>%
-  mutate(arrival_time_sec = hms::hms(arrival_time_sec)) %>%
-  arrange(arrival_time_sec)
-
-rm(order, route, cost, dummy, i, route_nodes, start_node,
-   dist_matrix, NB_dist_matrix, tour_duration)
-
-# seems like a plausible route for the secondary goal!
-
-node_list <- c()
-
-start_node <- full_nodes %>%
-  filter(library == route_info$library[1],
-         node_type == "library_in") %>%
-  pull(name) %>%
-  first()
-
-for (i in 1:(L - 1)) {
-  target_nodes <- full_nodes %>%
-    filter(library == route_info$library[i + 1],
-           node_type == "library_in") %>%
-    pull(name)
-
-  res <- full_graph %>%
-    shortest_paths(from = start_node, to = target_nodes,
-                   mode = "out", output = "both")
-
-  node_list <- c(node_list,
-                 names(Filter(function(x) length(x) > 0, res$vpath)[[1]]))
-
-  start_node <- last(node_list)
-}
-
-node_path <- full_nodes %>%
-  filter(name %in% node_list) %>%
-  arrange(arrival_time_sec)
-
-(last(node_path$arrival_time) - first(node_path$arrival_time)) %>%
-  seconds_to_period() %>%
-  hms::hms() %>%
-  print()
-
-rm(node_list, start_node, i, target_nodes, M, route_info, res,
-   library_indices, tour)
-
-# Testing TSP Solutions ---------------------------------------------------
-
-system.time({
-all_routes <- library_nodes %>%
-  as_tibble() %>%
-  mutate(row = row_number()) %>%
-  rowwise() %>%
-  mutate(raw_length = books_and_buses %>%
-           solve_TSP(method = "nn", start = row) %>%
-           tour_length())
-})
-
-feasible_routes <- all_routes %>%
-  filter(raw_length < 1e9) %>%
-  mutate(length = raw_length - 116e6) %>%
-  select(start_node = value, length) %>%
-  arrange(length)
-
-tour <- solve_TSP(books_and_buses, method = "nn",
-                  start = which(library_nodes == feasible_routes$start_node[1]))
-tour_length(tour)
-
-route <- tour %>%
-  as_tibble(rownames = "node") %>%
-  filter(node != "dummy")
-
-start_node <- first(route$node)
-
-order <- route %>%
-  pull(node) %>%
-  str_split(pattern = "-") %>%
-  as_tibble_col() %>%
-  rowwise() %>%
-  mutate(library = first(value)) %>%
-  select(library) %>%
-  distinct()
-
-cost <- rep(NA, N)
-
-for (i in 1:(N - 1)) {
-  cost[i] <- NB_dist_matrix[tour[i], tour[i + 1]]
-}
-
-route <- route %>%
-  cbind(cost) %>%
-  mutate(start = node, finish = lead(node)) %>%
-  select(start, finish, cost) %>%
-  filter(cost != 0)
-
-route_nodes <- c(start_node, route$finish)
-
-route_info <- full_nodes %>%
-  filter(name %in% route_nodes) %>%
-  arrange(arrival_time_sec)
-
-node_list <- c()
-
-start_node <- route_info$name[1]
-
-for (i in 1:(L - 1)) {
-  target_nodes <- full_nodes %>%
-    filter(library == route_info$library[i + 1],
-           node_type == "library_in") %>%
-    pull(name)
-
-  res <- full_graph %>%
-    shortest_paths(from = start_node, to = target_nodes,
-                   mode = "out", output = "both")
-
-  node_list <- c(node_list,
-                 names(Filter(function(x) length(x) > 0, res$vpath)[[1]]))
-
-  start_node <- last(node_list)
-}
-
-node_path <- full_nodes %>%
-  filter(name %in% node_list) %>%
-  arrange(arrival_time_sec)
-
-(last(node_path$arrival_time) - first(node_path$arrival_time)) %>%
-  seconds_to_period() %>%
-  hms::hms() %>%
-  print()
-
-
-# still want to try:
-# Concorde solvers
-# better graph/network packages
-# more realistic route time calculations (OSM, R5R)
+concorde_tour <- books_and_buses_tsp %>%
+  solve_TSP(method = "linkern", control = list(exe = here("software")))
