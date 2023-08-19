@@ -48,8 +48,10 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-# Tarc Data
+# Data
 data/tarc_gtfs.zip
+data/books_and_buses.tsp
+
 
 # Software
 /software

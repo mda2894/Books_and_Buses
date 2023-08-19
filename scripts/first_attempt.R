@@ -1,4 +1,7 @@
 # First Attempt
+#
+# Using tidygraph
+#
 
 # Setup ------------------------------------------------------------------
 
@@ -704,10 +707,8 @@ books_and_buses <- ATSP(NB_dist_matrix)
 
 # Concorde Solvers? -------------------------------------------------------
 
-concorde_path(here("software"))
+# books_and_buses %>%
+#   reformulate_ATSP_as_TSP() %>%
+#   write_TSPLIB(here("data", "books_and_buses.tsp"), precision = -1)
 
-books_and_buses_tsp <- books_and_buses %>%
-  reformulate_ATSP_as_TSP()
-
-concorde_tour <- books_and_buses_tsp %>%
-  solve_TSP(method = "linkern", control = list(exe = here("software")))
+concorde_path(file.path("C:", "cygwin64", "bin"))
