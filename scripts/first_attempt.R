@@ -14,11 +14,14 @@ library(tidygraph)
 library(geosphere)
 library(lubridate)
 library(TSP)
+library(doParallel)
 
 conflicts_prefer(
   dplyr::filter,
   dplyr::lag
 )
+
+registerDoParallel()
 
 # Data -------------------------------------------------------------------
 
@@ -261,18 +264,18 @@ rm(walking_edges, walking_graph, bus_only_graph)
 # (DONE) Connect each library to each of its stops, walk time + (10?) minutes inside
 # (DONE) Add waiting edges connecting all of the nodes for each library
 
-library_coords <- here("data", "library_coords.csv") %>%
+library_info <- here("data", "library_info.csv") %>%
   read_csv()
 
 library_data <- tibble()
 
-for (i in 1:nrow(library_coords)) {
+for (i in 1:nrow(library_info)) {
   closest_stops <- graph_data %>%
     select(stop_id, stop_name, node_lat, node_lon) %>%
     unique() %>%
-    mutate(library = library_coords$library_name[i],
-           library_lat = library_coords$library_lat[i],
-           library_lon = library_coords$library_lon[i],
+    mutate(library = library_info$library_name[i],
+           library_lat = library_info$library_lat[i],
+           library_lon = library_info$library_lon[i],
            dist = taxicab_dist(library_lon, node_lon,
                                library_lat, node_lat)) %>%
     arrange(dist) %>%
@@ -379,7 +382,7 @@ library_graph <- tbl_graph(nodes = library_nodes, edges = library_edges)
 
 full_graph <- graph_join(bus_and_walk, library_graph)
 
-rm(bus_and_walk, library_busy_edges, library_coords, library_data, library_edges,
+rm(bus_and_walk, library_busy_edges, library_info, library_data, library_edges,
    library_in_nodes, library_incoming_edges, library_nodes, library_out_nodes,
    library_outgoing_edges, library_waiting_edges, library_graph, stop_nodes,
    speed, library_stats, bus_stops, taxicab_dist)
@@ -460,91 +463,93 @@ full_nodes <- full_graph %>%
 #
 # rm(node_path, res, node_list, start_node, target_nodes)
 
-# TSP Setup ---------------------------------------------------------------
-
-# Pull distance matrix between all library-in nodes
-library_nodes <- full_nodes %>%
-  filter(node_type == "library_in") %>%
-  arrange(library, arrival_time_sec) %>%
-  pull(name)
-
-library_indices <- full_nodes %>%
-  filter(node_type == "library_in") %>%
-  arrange(library, arrival_time_sec) %>%
-  count(library) %>%
-  mutate(end = cumsum(n),
-         start = if_else(row_number() == 1, 1, lag(end) + 1)) %>%
-  select(library, start, end)
-
-system.time({
-  dist_matrix <- full_graph %>%
-    distances(v = library_nodes, to = library_nodes, mode = "out")
-})
-
-dist_matrix[dist_matrix == 0] <- Inf
-
-# Noon-Bean Transformation for Generalized TSP
+# # TSP Setup ---------------------------------------------------------------
 #
-# See Ben-Arieh, et al. "Transformations of generalized ATSP into ATSP" (2003)
-# for details on this transformation (and others)
-
-L <- nrow(library_indices)
-N <- length(library_nodes)
-M <- 1e6 # arbitrarily large "penalty" constant
-
-# add penalty to all edges (will only affect inter-cluster edges in the end)
-NB_dist_matrix <- (dist_matrix + M)
-
-for (i in 1:L) {
-  a <- library_indices$start[i]
-  b <- library_indices$end[i]
-
-  # clear all intra-cluster edges
-  NB_dist_matrix[a:b, a:b] <- Inf
-
-  # create intra-cluster cycle of weight 0
-  NB_dist_matrix[b, a] <- 0
-  for (j in a:(b - 1)) {
-    NB_dist_matrix[j, j + 1] <- 0
-  }
-
-  col_list <- c()
-  if (i < L) {
-    col_list <- c((b + 1):N, col_list)
-  }
-  if (i > 1) {
-    col_list <- c(1:(a - 1), col_list)
-  }
-
-  # shift all inter_cluster edges to account for intra-cluster cycle
-  for (k in col_list) {
-    NB_dist_matrix[a:b, k] <- lead(NB_dist_matrix[a:b, k],
-                                  default = NB_dist_matrix[a, k])
-  }
-}
-
-rm(a, b, i, j, k, col_list)
-
-# change Infs to 1000*M (for tracking)
-NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 1000*M
-
-# create "dummy city" to enable Hamiltonian path optimization
-dummy <- rep(100*M, N)
-NB_dist_matrix <- cbind(NB_dist_matrix, dummy)
-
-dummy <- c(rep(0, N), 1000*M)
-NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
-
-# TSP "Solution" ----------------------------------------------------------
-
-books_and_buses <- ATSP(NB_dist_matrix)
-
-# start_node <- which(library_nodes == "Main-1-in")
+# # Pull distance matrix between all library-in nodes
+# library_nodes <- full_nodes %>%
+#   filter(node_type == "library_in") %>%
+#   arrange(library, arrival_time_sec) %>%
+#   pull(name)
+#
+# library_indices <- full_nodes %>%
+#   filter(node_type == "library_in") %>%
+#   arrange(library, arrival_time_sec) %>%
+#   count(library) %>%
+#   mutate(end = cumsum(n),
+#          start = if_else(row_number() == 1, 1, lag(end) + 1)) %>%
+#   select(library, start, end)
 #
 # system.time({
-#   tour <- solve_TSP(books_and_buses, method = "nn", start = start_node)
+#   dist_matrix <- full_graph %>%
+#     distances(v = library_nodes, to = library_nodes, mode = "out")
 # })
-# tour_duration <- tour_length(tour) %% M
+#
+# dist_matrix[dist_matrix == 0] <- Inf
+#
+# # Noon-Bean Transformation for Generalized TSP
+# #
+# # See Ben-Arieh, et al. "Transformations of generalized ATSP into ATSP" (2003)
+# # for details on this transformation (and others)
+#
+# L <- nrow(library_indices)
+# N <- length(library_nodes)
+# M <- 1e6 # arbitrarily large "penalty" constant
+#
+# # add penalty to all edges (will only affect inter-cluster edges in the end)
+# NB_dist_matrix <- (dist_matrix + M)
+#
+# for (i in 1:L) {
+#   a <- library_indices$start[i]
+#   b <- library_indices$end[i]
+#
+#   # clear all intra-cluster edges
+#   NB_dist_matrix[a:b, a:b] <- Inf
+#
+#   # create intra-cluster cycle of weight 0
+#   NB_dist_matrix[b, a] <- 0
+#   for (j in a:(b - 1)) {
+#     NB_dist_matrix[j, j + 1] <- 0
+#   }
+#
+#   col_list <- c()
+#   if (i < L) {
+#     col_list <- c((b + 1):N, col_list)
+#   }
+#   if (i > 1) {
+#     col_list <- c(1:(a - 1), col_list)
+#   }
+#
+#   # shift all inter_cluster edges to account for intra-cluster cycle
+#   for (k in col_list) {
+#     NB_dist_matrix[a:b, k] <- lead(NB_dist_matrix[a:b, k],
+#                                   default = NB_dist_matrix[a, k])
+#   }
+# }
+#
+# rm(a, b, i, j, k, col_list)
+#
+# # change Infs to 1000*M (for tracking)
+# NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 1000*M
+#
+# # create "dummy city" to enable Hamiltonian path optimization
+# dummy <- rep(100*M, N)
+# NB_dist_matrix <- cbind(NB_dist_matrix, dummy)
+#
+# dummy <- c(rep(0, N), 1000*M)
+# NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
+#
+# rm(dummy, dist_matrix)
+#
+# # TSP "Solution" ----------------------------------------------------------
+#
+# books_and_buses <- ATSP(NB_dist_matrix)
+#
+# # start_node <- which(library_nodes == "Main-1-in")
+# #
+# system.time({
+#   tour <- solve_TSP(books_and_buses, method = "cheapest_insertion")
+# })
+# tour_duration <- tour_length(tour)
 #
 # route <- tour %>%
 #   as_tibble(rownames = "node") %>%
@@ -711,4 +716,94 @@ books_and_buses <- ATSP(NB_dist_matrix)
 #   reformulate_ATSP_as_TSP() %>%
 #   write_TSPLIB(here("data", "books_and_buses.tsp"), precision = -1)
 
-concorde_path(file.path("C:", "cygwin64", "bin"))
+# concorde_path(file.path("C:", "cygwin64", "bin"))
+
+# Open Hours Only ---------------------------------------------------------
+
+library_info <- here("data", "library_info.csv") %>%
+  read_csv()
+
+open_nodes <- full_nodes %>%
+  filter(node_type == "library_in") %>%
+  arrange(library, arrival_time_sec) %>%
+  rowwise() %>%
+  mutate(open_time = library_info$open_time[library_info$library_name == library],
+         close_time = library_info$close_time[library_info$library_name == library]) %>%
+  ungroup() %>%
+  filter(arrival_time >= open_time,
+         arrival_time <= close_time)
+
+library_indices <- open_nodes %>%
+  count(library) %>%
+  mutate(end = cumsum(n),
+         start = if_else(row_number() == 1, 1, lag(end) + 1)) %>%
+  select(library, start, end)
+
+library_nodes <- open_nodes %>%
+  pull(name)
+
+system.time({
+  dist_matrix <- full_graph %>%
+    distances(v = library_nodes, to = library_nodes, mode = "out")
+})
+
+dist_matrix[dist_matrix == 0] <- Inf
+
+# Noon-Bean Transformation for Generalized TSP
+#
+# See Ben-Arieh, et al. "Transformations of generalized ATSP into ATSP" (2003)
+# for details on this transformation (and others)
+
+L <- nrow(library_indices)
+N <- length(library_nodes)
+M <- 1e6 # arbitrarily large "penalty" constant
+
+# add penalty to all edges (will only affect inter-cluster edges in the end)
+NB_dist_matrix <- (dist_matrix + M)
+
+for (i in 1:L) {
+  a <- library_indices$start[i]
+  b <- library_indices$end[i]
+
+  # clear all intra-cluster edges
+  NB_dist_matrix[a:b, a:b] <- Inf
+
+  # create intra-cluster cycle of weight 0
+  NB_dist_matrix[b, a] <- 0
+  for (j in a:(b - 1)) {
+    NB_dist_matrix[j, j + 1] <- 0
+  }
+
+  col_list <- c()
+  if (i < L) {
+    col_list <- c((b + 1):N, col_list)
+  }
+  if (i > 1) {
+    col_list <- c(1:(a - 1), col_list)
+  }
+
+  # shift all inter_cluster edges to account for intra-cluster cycle
+  for (k in col_list) {
+    NB_dist_matrix[a:b, k] <- lead(NB_dist_matrix[a:b, k],
+                                   default = NB_dist_matrix[a, k])
+  }
+}
+
+rm(a, b, i, j, k, col_list)
+
+# change Infs to 1000*M (for tracking)
+NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 1000*M
+
+# create "dummy city" to enable Hamiltonian path optimization
+dummy <- rep(100*M, N)
+NB_dist_matrix <- cbind(NB_dist_matrix, dummy)
+
+dummy <- c(rep(0, N), 1000*M)
+NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
+
+books_and_buses <- ATSP(NB_dist_matrix)
+
+system.time({
+  tour <- solve_TSP(books_and_buses, method = "concorde")
+})
+tour_duration <- tour_length(tour)
