@@ -51,6 +51,7 @@ rsconnect/
 # Data
 data/tarc_gtfs.zip
 data/books_and_buses.tsp
+*.pbf
 
 
 # Software
