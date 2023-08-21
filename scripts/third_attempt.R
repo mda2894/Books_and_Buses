@@ -3,11 +3,12 @@
 # Using r5r
 #
 # NOTE: r5r requires Java JDK 11
+# Download: https://www.oracle.com/java/technologies/javase-jdk11-downloads.html
 #
 
 # Setup  ------------------------------------------------------------------
 
-options(java.parameters = "-Xmx2G")
+options(java.parameters = "-Xmx8G")
 
 library(conflicted)
 library(here)
@@ -44,4 +45,36 @@ oe_download_directory()
 osm_url <- "https://download.geofabrik.de/north-america/us/kentucky-latest.osm.pbf"
 osm_path <- oe_download(osm_url)
 
-setup_r5(here("data"))
+r5r_core <- setup_r5(here("data"))
+
+library_info <- read_csv(here("data", "library_info.csv"))
+
+# Travel Time Matrix ------------------------------------------------------
+
+libraries <- library_info %>%
+  select(id = library_name, lon = library_lon, lat = library_lat)
+
+tt_matrix <- travel_time_matrix(
+  r5r_core,
+  origins = libraries,
+  destinations = libraries,
+  mode = "TRANSIT",
+  departure_datetime = as.POSIXct("08-23-2023 09:00:00", format = "%m-%d-%Y %H:%M:%S"),
+  max_trip_duration = 600,
+  max_rides = 10
+)
+
+system.time({
+  exp_tt_matrix <- expanded_travel_time_matrix(
+    r5r_core,
+    origins = libraries,
+    destinations = libraries,
+    mode = "TRANSIT",
+    departure_datetime = as.POSIXct("08-23-2023 06:00:00", format = "%m-%d-%Y %H:%M:%S"),
+    time_window = 120,
+    max_trip_duration = 600,
+    max_walk_time = Inf,
+    max_rides = 10,
+    breakdown = F
+  )
+})
