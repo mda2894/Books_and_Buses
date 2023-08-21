@@ -808,6 +808,21 @@
       ],
       "Hash": "d02f8456a746098e0456cfd98db473c5"
     },
+    "gtfsrouter": {
+      "Package": "gtfsrouter",
+      "Version": "0.0.5",
+      "Source": "Repository",
+      "Repository": "RSPM",
+      "Requirements": [
+        "R",
+        "Rcpp",
+        "cli",
+        "data.table",
+        "geodist",
+        "methods"
+      ],
+      "Hash": "233d6e9773bac58b2498f81bf67585b3"
+    },
     "haven": {
       "Package": "haven",
       "Version": "2.5.3",
