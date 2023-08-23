@@ -3,7 +3,6 @@
 # Setup -------------------------------------------------------------------
 
 library(tidyverse)
-library(here)
 
 # Utils -------------------------------------------------------------------
 
@@ -29,6 +28,8 @@ sim_atsp <- function(n_cities, grid_size = 100, seed = NULL) {
 
 # Toy Data ----------------------------------------------------------------
 
+library(here)
+
 # symmetric 5 city toy problem
 test5 <- here("data", "five_d.csv") %>%
   read_csv(col_name = F) %>%
@@ -44,9 +45,9 @@ atsp9 <- sim_atsp(9, seed = 2894)
 
 # Lower Bound -------------------------------------------------------------
 
-simple_lower_bound <- function(dist_matrix, nodes = NULL, return_to_start = F) {
+calc_lower_bound <- function(dist_matrix, nodes = NULL) {
   # Calculate a simple lower bound for the cost of a Hamiltonian path
-  # using distance matrix and (optional) vector of rows to include in the path
+  # using distance matrix and (optional) vector of nodes to include in the path
   if (is.null(nodes)) {
     nodes <- 1:nrow(dist_matrix)
   }
@@ -75,22 +76,18 @@ simple_lower_bound <- function(dist_matrix, nodes = NULL, return_to_start = F) {
     }
   }
 
-  if (!return_to_start) {lower_bound <- lower_bound - max_min_edge}
-
   return(as.numeric(lower_bound))
 }
 
 # Testing
-simple_lower_bound(test5)
-simple_lower_bound(test5, return_to_start = T)
-simple_lower_bound(att48)
-simple_lower_bound(att48, return_to_start = T)
-simple_lower_bound(atsp9)
-simple_lower_bound(atsp9, return_to_start = T)
+calc_lower_bound(test5)
+calc_lower_bound(att48)
+calc_lower_bound(atsp9)
 
 # Path Cost Calculation ---------------------------------------------------
 
-path_distance <- function(distance_matrix, path = NULL, return_to_start = F) {
+calc_path_distance <- function(distance_matrix, path = NULL, start = NULL,
+                               return_to_start = F) {
   # Calculate the distance of a given path, for a given distance matrix,
   # with the option to return to the start of the path at the end
   if (is.null(path)) {
@@ -103,17 +100,22 @@ path_distance <- function(distance_matrix, path = NULL, return_to_start = F) {
     distance <- distance + distance_matrix[path[i], path[i + 1]]
   }
   if (return_to_start)  {
-    distance <- distance + distance_matrix[path[n], path[1]]
+    if (is.null(start)) {
+      distance <- distance + distance_matrix[path[n], path[1]]
+    } else {
+      distance <- distance + distance_matrix[path[n], start]
+    }
   }
 
   return(as.numeric(distance))
 }
 
 # Testing
-path_distance(test5)
-path_distance(test5, return_to_start = T)
-path_distance(test5, path = c(1, 3, 5, 2, 4))
-path_distance(test5, path = c(1, 3, 5, 2, 4), return_to_start = T)
+calc_path_distance(test5)
+calc_path_distance(test5, return_to_start = T)
+calc_path_distance(test5, path = c(2, 4))
+calc_path_distance(test5, path = c(2, 4), return_to_start = T)
+calc_path_distance(test5, path = c(2, 4), return_to_start = T, start = 1)
 
 # Nearest Neighbors -------------------------------------------------------
 
@@ -130,7 +132,8 @@ tsp_nn <- function(distance_matrix, start = NULL, return_to_start = F) {
     best <- list(path = c(), distance = Inf)
 
     for (i in 1:n) {
-      current <- tsp_nn(distance_matrix, start = i, return_to_start = return_to_start)
+      current <- distance_matrix %>%
+        tsp_nn(start = i, return_to_start = return_to_start)
       if (current$distance < best$distance) {
         best <- current
       }
@@ -180,13 +183,16 @@ tsp_nn(atsp9, start = "best")
 tsp_bnb <- function(distance_matrix, start = NULL, return_to_start = F) {
   # Simple branch and bound algorithm for solving a TSP
   n <- nrow(distance_matrix)
-  best <- tsp_nn(distance_matrix, start = "best", return_to_start = return_to_start)
+  start <- ifelse(is.null(start), 1, start)
 
-  queue <- data.frame(path = I(list(c(1))), lower_bound = 0)
+  best <- distance_matrix %>%
+    tsp_nn(start = start, return_to_start = return_to_start)
+
+  queue <- list(list(path = start, lower_bound = 0))
 
   while (length(queue) > 0) {
-    node <- queue[1, ]
-    queue <- queue[-1, ]
+    node <- queue[[1]]
+    queue <- queue[-1]
 
     if (node$lower_bound < best$distance) {
       unvisited <- setdiff(1:n, node$path)
@@ -194,25 +200,33 @@ tsp_bnb <- function(distance_matrix, start = NULL, return_to_start = F) {
         child_path <- c(node$path, city)
 
         if (length(child_path) == n) {
-          total_distance <- path_distance(distance_matrix, path = child_path,
-                                          return_to_start = return_to_start)
+          total_distance <- distance_matrix %>%
+            calc_path_distance(path = child_path, start = start,
+                               return_to_start = return_to_start)
           if (total_distance < best$distance) {
             best$distance <- total_distance
             best$path <- child_path
           }
         } else {
-          child_distance <- path_distance(distance_matrix, path = child_path)
-          child_lower_bound <- simple_lower_bound(distance_matrix, nodes = unvisited,
-                                                      return_to_start = return_to_start)
+          child_distance <- distance_matrix %>%
+            calc_path_distance(path = child_path)
+          child_lower_bound <- distance_matrix %>%
+            calc_lower_bound(nodes = unvisited)
           lower_bound <- child_distance + child_lower_bound
-          child_node <- data.frame(path = I(list(child_path)), lower_bound = lower_bound)
-          queue <- rbind(queue, child_node)
+          child_node <- list(list(path = child_path, lower_bound = lower_bound))
+          queue <- append(queue, child_node)
         }
       }
-      queue <- queue[order(queuelower_bound), ]
+      queue <- queue[order(sapply(queue, function(x) x$lower_bound))]
     }
   }
   return(best)
 }
 
 tsp_bnb(test5)
+tsp_bnb(atsp9)
+
+system.time({
+  tsp_bnb(att48)
+})
+
