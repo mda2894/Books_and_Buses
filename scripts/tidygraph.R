@@ -15,6 +15,7 @@ library(geosphere)
 library(lubridate)
 library(TSP)
 library(doParallel)
+library(reticulate)
 
 conflicts_prefer(
   dplyr::filter,
@@ -751,6 +752,7 @@ system.time({
 
 dist_matrix[dist_matrix == 0] <- Inf
 
+
 # Noon-Bean Transformation for Generalized TSP
 #
 # See Ben-Arieh, et al. "Transformations of generalized ATSP into ATSP" (2003)
@@ -758,10 +760,10 @@ dist_matrix[dist_matrix == 0] <- Inf
 
 L <- nrow(library_indices)
 N <- length(library_nodes)
-M <- 1e6 # arbitrarily large "penalty" constant
+M <- 1e4 # arbitrarily large "penalty" constant
 
 # add penalty to all edges (will only affect inter-cluster edges in the end)
-NB_dist_matrix <- (dist_matrix + M)
+NB_dist_matrix <- round((dist_matrix/60 + M))
 
 for (i in 1:L) {
   a <- library_indices$start[i]
@@ -794,18 +796,20 @@ for (i in 1:L) {
 rm(a, b, i, j, k, col_list)
 
 # change Infs to 1000*M (for tracking)
-NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 1000*M
+NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 100*M
 
 # create "dummy city" to enable Hamiltonian path optimization
-dummy <- rep(100*M, N)
+dummy <- rep(10*M, N)
 NB_dist_matrix <- cbind(NB_dist_matrix, dummy)
 
-dummy <- c(rep(0, N), 1000*M)
+dummy <- c(rep(0, N), 10*M)
 NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
+
+write_csv(as_tibble(NB_dist_matrix), here("data", "NB_dist_matrix.csv"), col_names = F)
 
 books_and_buses <- ATSP(NB_dist_matrix)
 
-TSP::write_TSPLIB(books_and_buses, here("software", "bnb.atsp"), precision = 0)
+# TSP::write_TSPLIB(books_and_buses, here("software", "bnb.atsp"), precision = 0)
 
 # # Time Dependent Distance Matrix ------------------------------------------
 #
@@ -818,6 +822,46 @@ TSP::write_TSPLIB(books_and_buses, here("software", "bnb.atsp"), precision = 0)
 #     distances(v = library_nodes, to = library_nodes, mode = "out")
 # })
 
+# elkai -------------------------------------------------------------------
 
+elkai <- import("elkai")
+elkai_dist_matrix <- elkai$DistanceMatrix(r_to_py(NB_dist_matrix)$tolist())
+elkai_solution <- elkai_dist_matrix$solve_tsp()
 
-# Try pyconcorde / elkai
+tour <- elkai_solution + 1
+
+route <- library_nodes[tour] %>%
+  as_tibble() %>%
+  select(node = value) %>%
+  filter(!is.na(node),
+         row_number() < n())
+
+start_node <- first(route$node)
+
+order <- route %>%
+  pull(node) %>%
+  str_split(pattern = "-") %>%
+  as_tibble_col() %>%
+  rowwise() %>%
+  mutate(library = first(value)) %>%
+  select(library) %>%
+  distinct()
+
+cost <- rep(NA, N)
+
+for (i in 1:(N - 1)) {
+  cost[i] <- NB_dist_matrix[tour[i], tour[i + 1]]
+}
+
+route <- route %>%
+  cbind(cost) %>%
+  mutate(start = node, finish = lead(node)) %>%
+  select(start, finish, cost) %>%
+  filter(cost != 0)
+
+route_nodes <- c(start_node, route$finish)
+
+route_info <- full_nodes %>%
+  filter(name %in% route_nodes) %>%
+  mutate(arrival_time_sec = hms::hms(arrival_time_sec)) %>%
+  arrange(arrival_time_sec)
