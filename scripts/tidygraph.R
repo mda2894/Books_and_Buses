@@ -805,10 +805,7 @@ NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
 
 books_and_buses <- ATSP(NB_dist_matrix)
 
-concorde_path('C:/cygwin64/home/mda2894/concorde/LINKERN/')
-
-linkern <- solve_TSP(books_and_buses, method = "linkern", as_TSP = T,
-                     exe = 'C:/cygwin64/home/mda2894/concorde/LINKERN/')
+TSP::write_TSPLIB(books_and_buses, here("software", "bnb.atsp"), precision = 0)
 
 # # Time Dependent Distance Matrix ------------------------------------------
 #
@@ -820,3 +817,7 @@ linkern <- solve_TSP(books_and_buses, method = "linkern", as_TSP = T,
 #   dist_matrix <- full_graph %>%
 #     distances(v = library_nodes, to = library_nodes, mode = "out")
 # })
+
+
+
+# Try pyconcorde / elkai
