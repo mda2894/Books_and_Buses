@@ -805,13 +805,18 @@ NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
 
 books_and_buses <- ATSP(NB_dist_matrix)
 
-# Time Dependent Distance Matrix ------------------------------------------
+concorde_path('C:/cygwin64/home/mda2894/concorde/LINKERN/')
 
-library_nodes <- open_nodes %>%
-  arrange(arrival_time) %>%
-  pull(name)
+linkern <- solve_TSP(books_and_buses, method = "linkern", as_TSP = T,
+                     exe = 'C:/cygwin64/home/mda2894/concorde/LINKERN/')
 
-system.time({
-  dist_matrix <- full_graph %>%
-    distances(v = library_nodes, to = library_nodes, mode = "out")
-})
+# # Time Dependent Distance Matrix ------------------------------------------
+#
+# library_nodes <- open_nodes %>%
+#   arrange(arrival_time) %>%
+#   pull(name)
+#
+# system.time({
+#   dist_matrix <- full_graph %>%
+#     distances(v = library_nodes, to = library_nodes, mode = "out")
+# })
