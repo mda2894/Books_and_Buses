@@ -49,9 +49,10 @@ po/*~
 rsconnect/
 
 # Data
+data/OTP
+data/R5R
 data/tarc_gtfs.zip
 data/books_and_buses.tsp
-*.pbf
 *.mapdb
 *.dat
 *.json
