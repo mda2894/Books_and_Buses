@@ -29,23 +29,23 @@ conflicts_prefer(
 
 registerDoParallel()
 
-oe_download_directory()
-
-# To use a permanent directory for osm files:
-# run usethis::edit_r_environ()
-# and add a line containing: OSMEXT_DOWNLOAD_DIRECTORY=/path/to/save/files
+# # To use a persistent directory for osm files run:
+# usethis::edit_r_environ(scope = "project")
+# # and add a line containing: OSMEXT_DOWNLOAD_DIRECTORY=/path/to/save/files
+# # then restart R session
 
 # Data --------------------------------------------------------------------
 
+r5r_path <- here("data", "R5R")
+
 # # uncomment this block to download new TARC GTFS file
-# tarc_file <- here("data", "tarc_gtfs.zip")
 # tarc_feed <- "http://googletransit.ridetarc.org/feed/google_transit.zip"
-# download.file(tarc_feed, destfile = tarc_file)
+# download.file(tarc_feed, destfile = here(r5r_path, "tarc_gtfs.zip"))
 
 osm_url <- "https://download.geofabrik.de/north-america/us/kentucky-latest.osm.pbf"
-osm_path <- oe_download(osm_url)
+oe_download(osm_url, download_directory = r5r_path)
 
-r5r_core <- setup_r5(here("data"))
+r5r_core <- setup_r5(r5r_path)
 
 library_info <- read_csv(here("data", "library_info.csv"))
 
@@ -59,7 +59,7 @@ tt_matrix <- travel_time_matrix(
   origins = libraries,
   destinations = libraries,
   mode = "TRANSIT",
-  departure_datetime = as.POSIXct("08-23-2023 09:00:00", format = "%m-%d-%Y %H:%M:%S"),
+  departure_datetime = as.POSIXct("08-30-2023 09:00:00", format = "%m-%d-%Y %H:%M:%S"),
   max_trip_duration = 600,
   max_rides = 10
 )
@@ -71,10 +71,18 @@ system.time({
     destinations = libraries,
     mode = "TRANSIT",
     departure_datetime = as.POSIXct("08-23-2023 06:00:00", format = "%m-%d-%Y %H:%M:%S"),
-    time_window = 120,
+    time_window = 30,
     max_trip_duration = 600,
     max_walk_time = Inf,
     max_rides = 10,
     breakdown = F
   )
 })
+
+exp_tt_matrix %>%
+  filter(to_id == "Fairdale") %>%
+  View() # all walking for some reason
+
+exp_tt_matrix %>%
+  filter(from_id == "Fairdale") %>%
+  View() # actually uses buses

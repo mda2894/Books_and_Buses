@@ -256,15 +256,15 @@ get_elkai_solution <- function(start_library, start_time = 9*60*60) {
   return(list(route_info = route_info, legs = legs, cost = sum(legs$cost)))
 }
 
-# All 9am Starts ----------------------------------------------------------
-
-all_9am_starts <- list()
-
-system.time({
-  for (library_name in library_info$library_name) {
-    elkai_res <- get_elkai_solution(library_name)
-    all_9am_starts <- append(all_9am_starts, list(elkai_res))
-  }
-})
-
-save(all_9am_starts, file = here("data", "all_9am_starts.RData"))
+# # All 9am Starts ----------------------------------------------------------
+#
+# all_9am_starts <- list()
+#
+# system.time({
+#   for (library_name in library_info$library_name) {
+#     elkai_res <- get_elkai_solution(library_name)
+#     all_9am_starts <- append(all_9am_starts, list(elkai_res))
+#   }
+# })
+#
+# save(all_9am_starts, file = here("data", "all_9am_starts.RData"))
