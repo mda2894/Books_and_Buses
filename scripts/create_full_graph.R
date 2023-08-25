@@ -12,7 +12,6 @@ library(geosphere)
 library(lubridate)
 library(TSP)
 library(doParallel)
-library(reticulate)
 
 conflicts_prefer(
   dplyr::filter,
