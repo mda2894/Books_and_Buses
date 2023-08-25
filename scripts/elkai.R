@@ -266,3 +266,5 @@ system.time({
     all_9am_starts <- append(all_9am_starts, list(elkai_res))
   }
 })
+
+save(all_9am_starts, file = here("data", "all_9am_starts.RData"))
