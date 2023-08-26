@@ -2,7 +2,7 @@
 
 # Setup -------------------------------------------------------------------
 
-options(java.parameters = "-Xmx8G")
+options(java.parameters = "-Xmx4G")
 
 library(conflicted)
 library(here)
@@ -86,7 +86,7 @@ get_otp_edges <- function(otp_con, from, to, start_time, lib_order) {
     otp_plan(from, to, fromID = from$library_name, toID = to$library_name,
              date_time = start_time, mode = c("BUS", "WALK"),
              maxWalkDistance = 12000, get_geometry = F, numItineraries = 1,
-             distance_balance = T) %>%
+             distance_balance = T, ncores = 6) %>%
     group_by(fromPlace, toPlace) %>%
     arrange(endTime) %>%
     filter(row_number() == 1) %>%
@@ -109,36 +109,26 @@ lib_order <- library_info$library_name
 to   = library_info[rep(seq(1, L), times = L),]
 from = library_info[rep(seq(1, L), each  = L),]
 
-start <- as.POSIXct("10-25-2023 06:00:00", format = "%m-%d-%Y %H:%M:%S")
+start <- as.POSIXct("10-25-2023 12:00:00", format = "%m-%d-%Y %H:%M:%S")
 
 otp_edges <- tibble()
 
-for (i in 1:600) {
+for (i in 1:60) {
   offset <- 60 * (i - 1)
   edges <- get_otp_edges(otp_con, from, to, start + offset, lib_order)
   otp_edges <- rbind(otp_edges, edges)
+  print(i)
 }
 
-otp_edges_nodes <- otp_edges %>%
-  arrange(from, to, start_time) %>%
-  group_by(from, to) %>%
-  mutate(remove = (edge_length - lead(edge_length)) == 1,
-         transit_node = lead(edge_length) > edge_length) %>%
-  ungroup() %>%
-  filter(!remove)
-
-# full_td_matrix <- array(dim = c(L, L, 18*60))
-#
-# system.time({
-#   for (i in 1:60) {
-#   offset <- 60 * (i - 1)
-#   distance_matrix <- otp_con %>%
-#     get_td_distance_matrix(from, to, start + offset, lib_order)
-#
-#   full_td_matrix[,,i] <- distance_matrix
-#   }
-# })
-#
-# save(full_td_matrix, file = here("data", "full_td_matrix.RData"))
+save(otp_edges, file = here("data", "OTP", "bnb", "otp_edges_12.RData"))
 
 otp_stop()
+
+# otp_edges_nodes <- otp_edges %>%
+#   arrange(from, to, start_time) %>%
+#   group_by(from, to) %>%
+#   mutate(remove = (edge_length - lead(edge_length)) == 1,
+#          transit_node = lead(edge_length) > edge_length) %>%
+#   ungroup() %>%
+#   filter(!remove) %>%
+#   arrange(from ,start_time, to)
