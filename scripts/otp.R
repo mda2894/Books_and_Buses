@@ -11,6 +11,7 @@ library(doParallel)
 library(opentripplanner)
 library(tmap)
 library(osmextract)
+library(sf)
 
 # OpenTripPlanner equires Java 8
 otp_check_java()
@@ -72,4 +73,60 @@ bnb_path <- here("data", "OTP", "bnb")
 # # Build graph
 # graph <- otp_build_graph(otp_path, bnb_path)
 
-setup <- otp_setup()
+setup <- otp_setup(otp_path, bnb_path)
+otp_con <- otp_connect()
+
+library_info <- read_csv(here("data", "library_info.csv")) %>%
+  st_as_sf(coords = c("library_lon", "library_lat"))
+
+# Functions ---------------------------------------------------------------
+
+get_td_distance_matrix <- function(otp_con, from, to, start_time, lib_order) {
+  distance_matrix <- otp_con %>%
+    otp_plan(from, to, fromID = from$library_name, toID = to$library_name,
+             date_time = start_time, mode = c("BUS", "WALK"),
+             maxWalkDistance = 12000, get_geometry = F, numItineraries = 1,
+             distance_balance = T) %>%
+    group_by(fromPlace, toPlace) %>%
+    arrange(endTime) %>%
+    filter(row_number() == 1) %>%
+    ungroup() %>%
+    mutate(time = as.numeric(endTime - start_time),
+           from = factor(fromPlace, levels = lib_order),
+           to = factor(toPlace, levels = lib_order)) %>%
+    select(from, to, time) %>%
+    arrange(from, to) %>%
+    pivot_wider(names_from = to, values_from = time) %>%
+    select(Main, everything(), -from) %>%
+    as.matrix() %>%
+    round() %>%
+    unname()
+
+  return(distance_matrix)
+}
+
+# Distance Matrix ---------------------------------------------------------
+
+L <- nrow(library_info)
+lib_order <- library_info$library_name
+
+to   = library_info[rep(seq(1, L), times = L),]
+from = library_info[rep(seq(1, L), each  = L),]
+
+start <- as.POSIXct("10-25-2023 06:00:00", format = "%m-%d-%Y %H:%M:%S")
+
+full_td_matrix <- array(dim = c(L, L, 18*60))
+
+system.time({
+  for (i in 1:60) {
+  offset <- 60 * (i - 1)
+  distance_matrix <- otp_con %>%
+    get_td_distance_matrix(from, to, start + offset, lib_order)
+
+  full_td_matrix[,,i] <- distance_matrix
+  }
+})
+
+save(full_td_matrix, file = here("data", "full_td_matrix.RData"))
+
+otp_stop()
