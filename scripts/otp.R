@@ -81,8 +81,8 @@ library_info <- read_csv(here("data", "library_info.csv")) %>%
 
 # Functions ---------------------------------------------------------------
 
-get_td_distance_matrix <- function(otp_con, from, to, start_time, lib_order) {
-  distance_matrix <- otp_con %>%
+get_otp_edges <- function(otp_con, from, to, start_time, lib_order) {
+  edges <- otp_con %>%
     otp_plan(from, to, fromID = from$library_name, toID = to$library_name,
              date_time = start_time, mode = c("BUS", "WALK"),
              maxWalkDistance = 12000, get_geometry = F, numItineraries = 1,
@@ -91,18 +91,14 @@ get_td_distance_matrix <- function(otp_con, from, to, start_time, lib_order) {
     arrange(endTime) %>%
     filter(row_number() == 1) %>%
     ungroup() %>%
-    mutate(time = as.numeric(endTime - start_time),
+    mutate(edge_length = ceiling(endTime - start_time),
            from = factor(fromPlace, levels = lib_order),
-           to = factor(toPlace, levels = lib_order)) %>%
-    select(from, to, time) %>%
-    arrange(from, to) %>%
-    pivot_wider(names_from = to, values_from = time) %>%
-    select(Main, everything(), -from) %>%
-    as.matrix() %>%
-    round() %>%
-    unname()
+           to = factor(toPlace, levels = lib_order),
+           start_time = start_time) %>%
+    select(from, to, edge_length, start_time) %>%
+    arrange(from, to)
 
-  return(distance_matrix)
+  return(edges)
 }
 
 # Distance Matrix ---------------------------------------------------------
@@ -115,18 +111,34 @@ from = library_info[rep(seq(1, L), each  = L),]
 
 start <- as.POSIXct("10-25-2023 06:00:00", format = "%m-%d-%Y %H:%M:%S")
 
-full_td_matrix <- array(dim = c(L, L, 18*60))
+otp_edges <- tibble()
 
-system.time({
-  for (i in 1:60) {
+for (i in 1:600) {
   offset <- 60 * (i - 1)
-  distance_matrix <- otp_con %>%
-    get_td_distance_matrix(from, to, start + offset, lib_order)
+  edges <- get_otp_edges(otp_con, from, to, start + offset, lib_order)
+  otp_edges <- rbind(otp_edges, edges)
+}
 
-  full_td_matrix[,,i] <- distance_matrix
-  }
-})
+otp_edges_nodes <- otp_edges %>%
+  arrange(from, to, start_time) %>%
+  group_by(from, to) %>%
+  mutate(remove = (edge_length - lead(edge_length)) == 1,
+         transit_node = lead(edge_length) > edge_length) %>%
+  ungroup() %>%
+  filter(!remove)
 
-save(full_td_matrix, file = here("data", "full_td_matrix.RData"))
+# full_td_matrix <- array(dim = c(L, L, 18*60))
+#
+# system.time({
+#   for (i in 1:60) {
+#   offset <- 60 * (i - 1)
+#   distance_matrix <- otp_con %>%
+#     get_td_distance_matrix(from, to, start + offset, lib_order)
+#
+#   full_td_matrix[,,i] <- distance_matrix
+#   }
+# })
+#
+# save(full_td_matrix, file = here("data", "full_td_matrix.RData"))
 
 otp_stop()
