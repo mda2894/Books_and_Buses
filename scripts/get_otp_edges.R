@@ -101,7 +101,7 @@ get_otp_edges <- function(otp_con, from, to, start_time, lib_order) {
   return(edges)
 }
 
-# Distance Matrix ---------------------------------------------------------
+# OTP Graph Edges ---------------------------------------------------------
 
 L <- nrow(library_info)
 lib_order <- library_info$library_name
