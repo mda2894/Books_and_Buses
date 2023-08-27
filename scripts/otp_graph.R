@@ -6,6 +6,7 @@ library(conflicted)
 library(here)
 library(doParallel)
 library(tidyverse)
+library(tidygraph)
 
 conflicts_prefer(
   dplyr::filter,
@@ -30,31 +31,23 @@ registerDoParallel()
 
 load(here("data", "otp_data.RData"))
 
-otp_graph_data <-  otp_data %>%
+graph_data <-  otp_data %>%
   arrange(from, to, start_time) %>%
   group_by(from, to) %>%
   mutate(waiting = (edge_length - lead(edge_length)) == 1,
-         walk_node = lead(edge_length) == edge_length | lag(edge_length) == edge_length,
-         transit_node = !waiting & !walk_node) %>%
+         walk_node = !waiting & (lead(edge_length) == edge_length | lag(edge_length) == edge_length),
+         transit_node = !waiting & !walk_node,
+         keep = walk_node | transit_node) %>%
   ungroup() %>%
-  arrange(from, to, start_time)
+  filter(keep,
+         edge_length <= 180) %>%
+  select(from, to, edge_length, start_time) %>%
+  arrange(from, start_time, to)
 
-keep <- otp_graph_data %>%
-  mutate(keep = edge_length - lead(edge_length) != 1) %>%
-  filter(keep)
+library_out_nodes <- graph_data %>%
+  mutate(node_id = paste(from, "out", format(start_time, "%H:%M"), sep = "-")) %>%
+  select(node_id)
 
-walk_nodes <- otp_graph_data %>%
-  filter(walk_node)
-
-transit_nodes <- otp_graph_data %>%
-  filter(transit_node)
-
-nine_am <- as.POSIXct("10-25-2023 09:00:00", format = "%m-%d-%Y %H:%M:%S")
-nine_pm <- as.POSIXct("10-25-2023 21:00:00", format = "%m-%d-%Y %H:%M:%S")
-
-diff <- full_join(walk_nodes, transit_nodes) %>%
-  full_join(keep) %>%
-  arrange(from, to, start_time) %>%
-  filter(keep & (walk_node | transit_node),
-         edge_length <= 180,
-         nine_am < start_time & start_time < nine_pm)
+library_in_nodes <- graph_data %>%
+  mutate(node_id = paste(to, "in", format(start_time + edge_length, "%H:%M"), sep = "-")) %>%
+  select(node_id)
