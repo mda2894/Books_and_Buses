@@ -11,8 +11,8 @@ library(tidygraph)
 library(TSP)
 library(reticulate)
 
-use_virtualenv("r-reticulate")
-elkai <- import("elkai")
+# use_virtualenv("r-reticulate")
+# elkai <- import("elkai")
 
 conflicts_prefer(
   dplyr::filter,
@@ -138,7 +138,8 @@ library_info <- here("data", "library_info.csv") %>%
          close_time = as.POSIXct(paste(DATE, close_time), format = "%m-%d-%Y %H:%M:%S"))
 
 # target_nodes_info <- full_nodes %>%
-#   filter(node_type == "arrival") %>%
+#   filter(node_type == "arrival",
+#          library != "Fairdale") %>%
 #   arrange(library, time) %>%
 #   rowwise() %>%
 #   mutate(open_time = library_info$open_time[library_info$library_name == library],
@@ -204,21 +205,22 @@ library_info <- here("data", "library_info.csv") %>%
 #
 # rm(a, b, i, j, k, col_list)
 #
-# # change Infs to 100*M (for tracking)
-# NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 100*M
+# # change Infs to 1000*M (for tracking)
+# NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 1000*M
+#
 #
 # # create "dummy city" to enable Hamiltonian path optimization
-# dummy <- rep(10*M, N)
+# dummy <- rep(100*M, N)
 # NB_dist_matrix <- cbind(NB_dist_matrix, dummy)
 #
-# dummy <- c(0, dummy)
+# dummy <- c(rep(0, N), 100*M)
 # NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
-
-# TSP ---------------------------------------------------------------------
-
+#
+# # TSP ---------------------------------------------------------------------
+#
 # otp_books_and_buses <- ATSP(NB_dist_matrix)
 #
-# tour <- solve_TSP(otp_books_and_buses, method = "nn", start = 1)
+# tour <- solve_TSP(otp_books_and_buses, method = "nn", start = 1142)
 # tour_duration <- tour_length(tour)
 
 # Elkai -------------------------------------------------------------------
@@ -382,18 +384,33 @@ get_elkai_solution <- function(start_library, start_time) {
 
 # Big Results List --------------------------------------------------------
 
-every_half_hour <- list(six_am = list(), six_thirty = list(), seven_am = list(),
-                        seven_thirty = list(), eight_am = list(), eight_thirty = list(),
-                        nine_am = list())
+# every_half_hour <- list(six_am = list(), six_thirty = list(), seven_am = list(),
+#                         seven_thirty = list(), eight_am = list(), eight_thirty = list(),
+#                         nine_am = list())
+#
+# system.time({
+#   for (i in 1:7) {
+#     start_time <- SIX_AM + (i - 1) * THIRTY_MINUTES
+#     for (library_name in library_info$library_name) {
+#       elkai_res <- get_elkai_solution(library_name, start_time)
+#       every_half_hour[[i]] <- append(every_half_hour[[i]], list(elkai_res))
+#     }
+#   }
+# })
+#
+# save(every_half_hour, file = here("data", "every_half_hour.RData"))
 
-system.time({
-  for (i in 1:7) {
-    start_time <- SIX_AM + (i - 1) * THIRTY_MINUTES
-    for (library_name in library_info$library_name) {
-      elkai_res <- get_elkai_solution(library_name, start_time)
-      every_half_hour[[i]] <- append(every_half_hour[[i]], list(elkai_res))
-    }
-  }
-})
+load(here("data", "every_half_hour.RData"))
 
-save(every_half_hour, file = here("data", "every_half_hour.RData"))
+times <- every_half_hour %>%
+  lapply(function(x) x %>% lapply(function(y) y$cost))
+
+best_times <- lapply(times, function(x) min(unlist(x)))
+which_time <- which.min(best_times)
+which_library <- lapply(times, function(x) which.min(unlist(x)))[[which_time]]
+
+best_overall <- every_half_hour[[which_time]][[which_library]]
+best_overall$route_info
+
+nine_am_starts <- lapply(every_half_hour$nine_am, function(x) x$route_info[x$cost < 1000000])
+print(nine_am_starts)

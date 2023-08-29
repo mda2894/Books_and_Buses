@@ -537,7 +537,7 @@ full_nodes <- full_graph %>%
 # dummy <- rep(100*M, N)
 # NB_dist_matrix <- cbind(NB_dist_matrix, dummy)
 #
-# dummy <- c(rep(0, N), 1000*M)
+# dummy <- c(rep(0, N), 100*M)
 # NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
 #
 # rm(dummy, dist_matrix)
