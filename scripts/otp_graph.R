@@ -9,6 +9,10 @@ library(tidyverse)
 library(igraph)
 library(tidygraph)
 library(TSP)
+library(reticulate)
+
+use_virtualenv("r-reticulate")
+elkai <- import("elkai")
 
 conflicts_prefer(
   dplyr::filter,
@@ -20,8 +24,10 @@ registerDoParallel()
 # Constants ---------------------------------------------------------------
 
 DATE <- "10-25-2023"
+SIX_AM <- as.POSIXct(paste(DATE, "06:00:00"), format = "%m-%d-%Y %H:%M:%S")
 MIDNIGHT <- as.POSIXct(paste(DATE, "24:00:00"), format = "%m-%d-%Y %H:%M:%S")
-BUSY_TIME <- duration(5, "minutes")
+BUSY_TIME <- duration(0, "minutes")
+THIRTY_MINUTES <- duration(30, "minutes")
 
 # Data --------------------------------------------------------------------
 
@@ -131,86 +137,263 @@ library_info <- here("data", "library_info.csv") %>%
   mutate(open_time = as.POSIXct(paste(DATE, open_time), format = "%m-%d-%Y %H:%M:%S"),
          close_time = as.POSIXct(paste(DATE, close_time), format = "%m-%d-%Y %H:%M:%S"))
 
-target_nodes_info <- full_nodes %>%
-  filter(node_type == "arrival") %>%
-  arrange(library, time) %>%
-  rowwise() %>%
-  mutate(open_time = library_info$open_time[library_info$library_name == library],
-         close_time = library_info$close_time[library_info$library_name == library]) %>%
-  ungroup() %>%
-  filter(time >= open_time,
-         time <= close_time)
-
-library_indices <- target_nodes_info %>%
-  count(library) %>%
-  mutate(end = cumsum(n),
-         start = if_else(row_number() == 1, 1, lag(end) + 1),
-         total = end - start + 1) %>%
-  select(library, start, end, total)
-
-target_nodes <- target_nodes_info %>%
-  pull(name)
-
-dist_matrix <- full_graph %>%
-  distances(v = target_nodes, to = target_nodes, mode = "out")
-
-dist_matrix[dist_matrix == 0] <- Inf
-
-# Noon-Bean Transformation for Generalized TSP
+# target_nodes_info <- full_nodes %>%
+#   filter(node_type == "arrival") %>%
+#   arrange(library, time) %>%
+#   rowwise() %>%
+#   mutate(open_time = library_info$open_time[library_info$library_name == library],
+#          close_time = library_info$close_time[library_info$library_name == library]) %>%
+#   ungroup() %>%
+#   filter(time >= open_time,
+#          time <= close_time)
 #
-# See Ben-Arieh, et al. "Transformations of generalized ATSP into ATSP" (2003)
-# for details on this transformation (and others)
-
-L <- nrow(library_indices)
-N <- length(target_nodes)
-M <- 1e4 # arbitrarily large "penalty" constant
-
-# add penalty to all edges (will only affect inter-cluster edges in the end)
-NB_dist_matrix <- dist_matrix + M
-
-for (i in 1:L) {
-  a <- library_indices$start[i]
-  b <- library_indices$end[i]
-
-  # clear all intra-cluster edges
-  NB_dist_matrix[a:b, a:b] <- Inf
-
-  # create intra-cluster cycle of weight 0
-  NB_dist_matrix[b, a] <- 0
-  for (j in a:(b - 1)) {
-    NB_dist_matrix[j, j + 1] <- 0
-  }
-
-  col_list <- c()
-  if (i < L) {
-    col_list <- c((b + 1):N, col_list)
-  }
-  if (i > 1) {
-    col_list <- c(1:(a - 1), col_list)
-  }
-
-  # shift all inter_cluster edges to account for intra-cluster cycle
-  for (k in col_list) {
-    NB_dist_matrix[a:b, k] <- lead(NB_dist_matrix[a:b, k],
-                                   default = NB_dist_matrix[a, k])
-  }
-}
-
-rm(a, b, i, j, k, col_list)
-
-# change Infs to 100*M (for tracking)
-NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 100*M
-
-# create "dummy city" to enable Hamiltonian path optimization
-dummy <- rep(10*M, N)
-NB_dist_matrix <- cbind(NB_dist_matrix, dummy)
-
-dummy <- c(rep(0, N), 10*M)
-NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
+# library_indices <- target_nodes_info %>%
+#   count(library) %>%
+#   mutate(end = cumsum(n),
+#          start = if_else(row_number() == 1, 1, lag(end) + 1),
+#          total = end - start + 1) %>%
+#   select(library, start, end, total)
+#
+# target_nodes <- target_nodes_info %>%
+#   pull(name)
+#
+# dist_matrix <- full_graph %>%
+#   distances(v = target_nodes, to = target_nodes, mode = "out")
+#
+# dist_matrix[dist_matrix == 0] <- Inf
+#
+# # Noon-Bean Transformation for Generalized TSP
+# #
+# # See Ben-Arieh, et al. "Transformations of generalized ATSP into ATSP" (2003)
+# # for details on this transformation (and others)
+#
+# L <- nrow(library_indices)
+# N <- length(target_nodes)
+# M <- 1e4 # arbitrarily large "penalty" constant
+#
+# # add penalty to all edges (will only affect inter-cluster edges in the end)
+# NB_dist_matrix <- dist_matrix + M
+#
+# for (i in 1:L) {
+#   a <- library_indices$start[i]
+#   b <- library_indices$end[i]
+#
+#   # clear all intra-cluster edges
+#   NB_dist_matrix[a:b, a:b] <- Inf
+#
+#   # create intra-cluster cycle of weight 0
+#   NB_dist_matrix[b, a] <- 0
+#   for (j in a:(b - 1)) {
+#     NB_dist_matrix[j, j + 1] <- 0
+#   }
+#
+#   col_list <- c()
+#   if (i < L) {
+#     col_list <- c((b + 1):N, col_list)
+#   }
+#   if (i > 1) {
+#     col_list <- c(1:(a - 1), col_list)
+#   }
+#
+#   # shift all inter_cluster edges to account for intra-cluster cycle
+#   for (k in col_list) {
+#     NB_dist_matrix[a:b, k] <- lead(NB_dist_matrix[a:b, k],
+#                                    default = NB_dist_matrix[a, k])
+#   }
+# }
+#
+# rm(a, b, i, j, k, col_list)
+#
+# # change Infs to 100*M (for tracking)
+# NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 100*M
+#
+# # create "dummy city" to enable Hamiltonian path optimization
+# dummy <- rep(10*M, N)
+# NB_dist_matrix <- cbind(NB_dist_matrix, dummy)
+#
+# dummy <- c(0, dummy)
+# NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
 
 # TSP ---------------------------------------------------------------------
 
-otp_books_and_buses <- ATSP(NB_dist_matrix)
+# otp_books_and_buses <- ATSP(NB_dist_matrix)
+#
+# tour <- solve_TSP(otp_books_and_buses, method = "nn", start = 1)
+# tour_duration <- tour_length(tour)
 
-tour <- solve_TSP(otp_books_and_buses, method = "repetitive_nn")
-tour_duration <- tour_length(tour)
+# Elkai -------------------------------------------------------------------
+
+# elkai_dist_matrix <- elkai$DistanceMatrix(r_to_py(NB_dist_matrix)$tolist())
+# elkai_solution <- elkai_dist_matrix$solve_tsp()
+#
+# tour <- elkai_solution[elkai_solution != N] + 1
+#
+# route <- target_nodes[tour] %>%
+#   as_tibble() %>%
+#   select(node = value) %>%
+#   filter(row_number() < n())
+#
+# start_node <- first(route$node)
+#
+# order <- route %>%
+#   pull(node) %>%
+#   str_split(pattern = "-") %>%
+#   as_tibble_col() %>%
+#   rowwise() %>%
+#   mutate(library = first(value)) %>%
+#   ungroup() %>%
+#   select(library) %>%
+#   distinct()
+#
+# cost <- rep(NA, N)
+#
+# for (i in 1:(N - 1)) {
+#   cost[i] <- NB_dist_matrix[tour[i], tour[i + 1]]
+# }
+#
+# legs <- route %>%
+#   cbind(cost) %>%
+#   mutate(start = node, finish = lead(node)) %>%
+#   select(start, finish, cost) %>%
+#   filter(cost != 0)
+#
+# route_nodes <- c(start_node, legs$finish)
+#
+# route_info <- full_nodes %>%
+#   filter(name %in% route_nodes) %>%
+#   arrange(time)
+
+# Elkai Function ----------------------------------------------------------
+
+get_elkai_solution <- function(start_library, start_time) {
+  target_nodes_info <- full_nodes %>%
+    filter(node_type == "arrival",
+           time >= start_time) %>%
+    mutate(library = factor(library) %>% fct_relevel(start_library)) %>%
+    arrange(library, time)
+
+  library_indices <- target_nodes_info %>%
+    count(library) %>%
+    mutate(end = cumsum(n),
+           start = if_else(row_number() == 1, 1, lag(end) + 1),
+           total = end - start + 1) %>%
+    select(library, start, end, total)
+
+  target_nodes <- target_nodes_info %>%
+    pull(name)
+
+  dist_matrix <- full_graph %>%
+    distances(v = target_nodes, to = target_nodes, mode = "out")
+
+  dist_matrix[dist_matrix == 0] <- Inf
+
+  # Noon-Bean Transformation for Generalized TSP
+  #
+  # See Ben-Arieh, et al. "Transformations of generalized ATSP into ATSP" (2003)
+  # for details on this transformation (and others)
+
+  L <- nrow(library_indices)
+  N <- length(target_nodes)
+  M <- 1e4 # arbitrarily large "penalty" constant
+
+  # add penalty to all edges (will only affect inter-cluster edges in the end)
+  NB_dist_matrix <- dist_matrix + M
+
+  for (i in 1:L) {
+    a <- library_indices$start[i]
+    b <- library_indices$end[i]
+
+    # clear all intra-cluster edges
+    NB_dist_matrix[a:b, a:b] <- Inf
+
+    # create intra-cluster cycle of weight 0
+    NB_dist_matrix[b, a] <- 0
+    for (j in a:(b - 1)) {
+      NB_dist_matrix[j, j + 1] <- 0
+    }
+
+    col_list <- c()
+    if (i < L) {
+      col_list <- c((b + 1):N, col_list)
+    }
+    if (i > 1) {
+      col_list <- c(1:(a - 1), col_list)
+    }
+
+    # shift all inter_cluster edges to account for intra-cluster cycle
+    for (k in col_list) {
+      NB_dist_matrix[a:b, k] <- lead(NB_dist_matrix[a:b, k],
+                                     default = NB_dist_matrix[a, k])
+    }
+  }
+
+  # change Infs to 100*M (for tracking)
+  NB_dist_matrix[is.infinite(NB_dist_matrix)] <- 100*M
+
+  # create "dummy city" to enable Hamiltonian path optimization
+  dummy <- rep(10*M, N)
+  NB_dist_matrix <- cbind(NB_dist_matrix, dummy)
+
+  dummy <- c(0, dummy)
+  NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
+
+  elkai_dist_matrix <- elkai$DistanceMatrix(r_to_py(NB_dist_matrix)$tolist())
+  elkai_solution <- elkai_dist_matrix$solve_tsp()
+
+  tour <- elkai_solution[elkai_solution != N] + 1
+
+  route <- target_nodes[tour] %>%
+    as_tibble() %>%
+    select(node = value) %>%
+    filter(row_number() < n())
+
+  start_node <- first(route$node)
+
+  order <- route %>%
+    pull(node) %>%
+    str_split(pattern = "-") %>%
+    as_tibble_col() %>%
+    rowwise() %>%
+    mutate(library = first(value)) %>%
+    ungroup() %>%
+    select(library) %>%
+    distinct()
+
+  cost <- rep(NA, N)
+
+  for (i in 1:(N - 1)) {
+    cost[i] <- NB_dist_matrix[tour[i], tour[i + 1]]
+  }
+
+  legs <- route %>%
+    cbind(cost) %>%
+    mutate(start = node, finish = lead(node)) %>%
+    select(start, finish, cost) %>%
+    filter(cost != 0)
+
+  route_nodes <- c(start_node, legs$finish)
+
+  route_info <- full_nodes %>%
+    filter(name %in% route_nodes) %>%
+    arrange(time)
+
+  return(list(route_info = route_info, legs = legs, cost = sum(legs$cost)))
+}
+
+# Big Results List --------------------------------------------------------
+
+every_half_hour <- list(six_am = list(), six_thirty = list(), seven_am = list(),
+                        seven_thirty = list(), eight_am = list(), eight_thirty = list(),
+                        nine_am = list())
+
+system.time({
+  for (i in 1:7) {
+    start_time <- SIX_AM + (i - 1) * THIRTY_MINUTES
+    for (library_name in library_info$library_name) {
+      elkai_res <- get_elkai_solution(library_name, start_time)
+      every_half_hour[[i]] <- append(every_half_hour[[i]], list(elkai_res))
+    }
+  }
+})
+
+save(every_half_hour, file = here("data", "every_half_hour.RData"))
