@@ -11,8 +11,8 @@ library(tidygraph)
 library(TSP)
 library(reticulate)
 
-# use_virtualenv("r-reticulate")
-# elkai <- import("elkai")
+use_virtualenv("r-reticulate")
+elkai <- import("elkai")
 
 conflicts_prefer(
   dplyr::filter,
@@ -25,6 +25,7 @@ registerDoParallel()
 
 DATE <- "10-25-2023"
 SIX_AM <- as.POSIXct(paste(DATE, "06:00:00"), format = "%m-%d-%Y %H:%M:%S")
+NINE_AM <- as.POSIXct(paste(DATE, "09:00:00"), format = "%m-%d-%Y %H:%M:%S")
 MIDNIGHT <- as.POSIXct(paste(DATE, "24:00:00"), format = "%m-%d-%Y %H:%M:%S")
 BUSY_TIME <- duration(0, "minutes")
 THIRTY_MINUTES <- duration(30, "minutes")
@@ -267,10 +268,11 @@ library_info <- here("data", "library_info.csv") %>%
 
 # Elkai Function ----------------------------------------------------------
 
-get_elkai_solution <- function(start_library, start_time) {
+get_elkai_solution <- function(start_library, start_time, exclude = NULL) {
   target_nodes_info <- full_nodes %>%
     filter(node_type == "arrival",
-           time >= start_time) %>%
+           time >= start_time,
+           !(library %in% exclude)) %>%
     mutate(library = factor(library) %>% fct_relevel(start_library)) %>%
     arrange(library, time)
 
@@ -400,17 +402,34 @@ get_elkai_solution <- function(start_library, start_time) {
 #
 # save(every_half_hour, file = here("data", "every_half_hour.RData"))
 
-load(here("data", "every_half_hour.RData"))
+# load(here("data", "every_half_hour.RData"))
+#
+# times <- every_half_hour %>%
+#   lapply(function(x) x %>% lapply(function(y) y$cost))
+#
+# best_times <- lapply(times, function(x) min(unlist(x)))
+# which_time <- which.min(best_times)
+# which_library <- lapply(times, function(x) which.min(unlist(x)))[[which_time]]
+#
+# best_overall <- every_half_hour[[which_time]][[which_library]]
+# best_overall$route_info
+#
+# nine_am_starts <- lapply(every_half_hour$nine_am, function(x) x$route_info[x$cost < 1000000])
+# print(nine_am_starts)
 
-times <- every_half_hour %>%
-  lapply(function(x) x %>% lapply(function(y) y$cost))
+# welp, doesn't seem feasible
 
-best_times <- lapply(times, function(x) min(unlist(x)))
-which_time <- which.min(best_times)
-which_library <- lapply(times, function(x) which.min(unlist(x)))[[which_time]]
+# Exclude Libraries -------------------------------------------------------
 
-best_overall <- every_half_hour[[which_time]][[which_library]]
-best_overall$route_info
+exclude <- "Fairdale"
 
-nine_am_starts <- lapply(every_half_hour$nine_am, function(x) x$route_info[x$cost < 1000000])
-print(nine_am_starts)
+lib_list <- library_info %>%
+  select(library_name) %>%
+  filter(!(library_name %in% exclude))
+
+no_fairdale <- list()
+
+for (lib in lib_list) {
+  elkai_res <- get_elkai_solution(lib, NINE_AM, exclude)
+  no_fairdale <- append(no_fairdale, list(elkai_res))
+}
