@@ -425,7 +425,8 @@ exclude <- "Fairdale"
 
 lib_list <- library_info %>%
   select(library_name) %>%
-  filter(!(library_name %in% exclude))
+  filter(!(library_name %in% exclude)) %>%
+  pull(library_name)
 
 no_fairdale <- list()
 
@@ -433,3 +434,9 @@ for (lib in lib_list) {
   elkai_res <- get_elkai_solution(lib, NINE_AM, exclude)
   no_fairdale <- append(no_fairdale, list(elkai_res))
 }
+
+for (route in no_fairdale) {
+  print(route$route_info)
+}
+
+save(no_fairdale, file =  here("data", "no_fairdale.RData"))
