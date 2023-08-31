@@ -84,7 +84,7 @@ library_info <- read_csv(here("data", "library_info.csv")) %>%
 get_otp_edges <- function(otp_con, from, to, start_time, lib_order) {
   edges <- otp_con %>%
     otp_plan(from, to, fromID = from$library_name, toID = to$library_name,
-             date_time = start_time, mode = c("BUS", "WALK"),
+             date_time = start_time, mode = c("BUS", "WALK", "BICYCLE"),
              maxWalkDistance = 12000, get_geometry = F, numItineraries = 1,
              distance_balance = T, ncores = 6) %>%
     group_by(fromPlace, toPlace) %>%
@@ -97,7 +97,6 @@ get_otp_edges <- function(otp_con, from, to, start_time, lib_order) {
            start_time = start_time) %>%
     select(from, to, edge_length, start_time) %>%
     arrange(from, to)
-
   return(edges)
 }
 
@@ -109,7 +108,7 @@ lib_order <- library_info$library_name
 to   = library_info[rep(seq(1, L), times = L),]
 from = library_info[rep(seq(1, L), each  = L),]
 
-start <- as.POSIXct("10-25-2023 23:00:00", format = "%m-%d-%Y %H:%M:%S")
+start <- as.POSIXct("10-25-2023 09:00:00", format = "%m-%d-%Y %H:%M:%S")
 
 otp_edges <- tibble()
 
@@ -120,7 +119,7 @@ for (i in 1:60) {
   print(i)
 }
 
-save(otp_edges, file = here("data", "OTP", "bnb", "otp_edges_23.RData"))
+save(otp_edges, file = here("data", "OTP", "bnb", "otp_cycling_09.RData"))
 
 otp_stop()
 
