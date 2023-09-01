@@ -108,7 +108,7 @@ lib_order <- library_info$library_name
 to   = library_info[rep(seq(1, L), times = L),]
 from = library_info[rep(seq(1, L), each  = L),]
 
-start <- as.POSIXct("10-25-2023 09:00:00", format = "%m-%d-%Y %H:%M:%S")
+start <- as.POSIXct("10-25-2023 16:00:00", format = "%m-%d-%Y %H:%M:%S")
 
 otp_edges <- tibble()
 
@@ -119,7 +119,7 @@ for (i in 1:60) {
   print(i)
 }
 
-save(otp_edges, file = here("data", "OTP", "bnb", "otp_cycling_09.RData"))
+save(otp_edges, file = here("data", "OTP", "bnb", "otp_cycling_16.RData"))
 
 otp_stop()
 
