@@ -9,8 +9,6 @@ library(here)
 library(tidyverse)
 library(doParallel)
 library(opentripplanner)
-library(tmap)
-library(osmextract)
 library(sf)
 
 # OpenTripPlanner equires Java 8
@@ -30,6 +28,7 @@ registerDoParallel()
 
 # Demo --------------------------------------------------------------------
 
+# library(tmap)
 # jar_path <- otp_dl_jar(here("data", "OTP"), cache = F)
 #
 # data_path <- here("data", "OTP", "demo")
@@ -67,6 +66,7 @@ bnb_path <- here("data", "OTP", "bnb")
 # download.file(tarc_feed, destfile = here(data_path, "tarc_gtfs.zip"))
 
 # # Download kentucky osm data here. Cropped down to Louisville with osmosis.
+# library(osmextract)
 # osm_url <- "https://download.geofabrik.de/north-america/us/kentucky-latest.osm.pbf"
 # oe_download(osm_url, download_directory = data_path)
 
@@ -108,7 +108,7 @@ lib_order <- library_info$library_name
 to   = library_info[rep(seq(1, L), times = L),]
 from = library_info[rep(seq(1, L), each  = L),]
 
-start <- as.POSIXct("10-25-2023 16:00:00", format = "%m-%d-%Y %H:%M:%S")
+start <- as.POSIXct("10-25-2023 23:00:00", format = "%m-%d-%Y %H:%M:%S")
 
 otp_edges <- tibble()
 
@@ -119,7 +119,7 @@ for (i in 1:60) {
   print(i)
 }
 
-save(otp_edges, file = here("data", "OTP", "bnb", "otp_cycling_16.RData"))
+save(otp_edges, file = here("data", "otp_cycling_23.RData"))
 
 otp_stop()
 
