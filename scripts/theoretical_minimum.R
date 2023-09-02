@@ -44,15 +44,7 @@ for (i in 1:1000) {
 
 # Lower Bound (w/ Cycling) ------------------------------------------------
 
-cycling_data <- tibble()
-
-for (hour in 6:16) {
-  file_name = paste0("otp_cycling_", hour, ".RData")
-  file_path <- here("data", file_name)
-  load(file_path)
-  cycling_data <- rbind(cycling_data, otp_edges)
-  rm(otp_edges)
-}
+load(here("data", "otp_cycling.RData"))
 
 min_cycling_matrix <- matrix(NA, 17, 17)
 
@@ -66,4 +58,4 @@ for (i in 1:17) {
   }
 }
 
-# min cycling times are higher than min walking times ???
+# min cycling times are exactly the same...
