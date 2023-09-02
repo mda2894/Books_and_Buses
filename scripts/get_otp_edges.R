@@ -73,7 +73,7 @@ bnb_path <- here("data", "OTP", "bnb")
 # # Build graph
 # graph <- otp_build_graph(otp_path, bnb_path)
 
-setup <- otp_setup(otp_path, bnb_path)
+setup <- otp_setup(otp_path, bnb_path, open_browser = F)
 otp_con <- otp_connect()
 
 library_info <- read_csv(here("data", "library_info.csv")) %>%
@@ -108,7 +108,7 @@ lib_order <- library_info$library_name
 to   = library_info[rep(seq(1, L), times = L),]
 from = library_info[rep(seq(1, L), each  = L),]
 
-start <- as.POSIXct("10-25-2023 07:00:00", format = "%m-%d-%Y %H:%M:%S")
+start <- as.POSIXct("10-25-2023 22:00:00", format = "%m-%d-%Y %H:%M:%S")
 
 otp_edges <- tibble()
 
@@ -119,7 +119,7 @@ for (i in 1:60) {
   print(i)
 }
 
-save(otp_edges, file = here("data", "otp_cycling_7.RData"))
+save(otp_edges, file = here("data", "otp_cycling_22.RData"))
 
 otp_stop()
 
