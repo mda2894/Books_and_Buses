@@ -32,17 +32,17 @@ THIRTY_MINUTES <- duration(30, "minutes")
 
 # Data --------------------------------------------------------------------
 
-# otp_data <- tibble()
+# cycling_data <- tibble()
 #
 # for (hour in 6:23) {
 #   file_name = paste0("otp_cycling_", hour, ".RData")
 #   file_path <- here("data", file_name)
 #   load(file_path)
-#   otp_data <- rbind(otp_data, otp_edges)
+#   cycling_data <- rbind(cycling_data, otp_edges)
 #   rm(otp_edges)
 # }
 #
-# save(otp_data, file = here("data", "otp_cycling.RData"))
+# save(cycling_data, file = here("data", "otp_cycling.RData"))
 
 load(here("data", "otp_cycling.RData"))
 
@@ -123,7 +123,7 @@ all_edges <- rbind(travel_edges, busy_edges, waiting_edges)
 
 full_graph <- tbl_graph(all_nodes, all_edges)
 
-rm(all_edges, all_nodes, arrival_nodes, busy_edges, departure_nodes, otp_data,
+rm(all_edges, all_nodes, arrival_nodes, busy_edges, departure_nodes, cycling_data,
    travel_edges, waiting_edges)
 
 # Distance Matrix ---------------------------------------------------------
@@ -220,5 +220,38 @@ NB_dist_matrix <- rbind(NB_dist_matrix, dummy)
 
 otp_books_and_buses <- ATSP(NB_dist_matrix)
 
-tour <- solve_TSP(otp_books_and_buses, method = "repetitive_nn")
+tour <- solve_TSP(otp_books_and_buses, method = "nn")
 tour_duration <- tour_length(tour)
+
+route <- tour %>%
+  as_tibble(rownames = "node") %>%
+  filter(node != "dummy")
+
+start_node <- first(route$node)
+
+order <- route %>%
+  pull(node) %>%
+  str_split(pattern = "-") %>%
+  as_tibble_col() %>%
+  rowwise() %>%
+  mutate(library = first(value)) %>%
+  select(library) %>%
+  distinct()
+
+cost <- rep(NA, N)
+
+for (i in 1:(N - 1)) {
+  cost[i] <- NB_dist_matrix[tour[i], tour[i + 1]]
+}
+
+route <- route %>%
+  cbind(cost) %>%
+  mutate(start = node, finish = lead(node)) %>%
+  select(start, finish, cost) %>%
+  filter(cost != 0)
+
+route_nodes <- c(start_node, route$finish)
+
+route_info <- full_nodes %>%
+  filter(name %in% route_nodes) %>%
+  arrange(time)

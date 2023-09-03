@@ -9,7 +9,7 @@ library(TSP)
 # Data --------------------------------------------------------------------
 
 load(here("data", "otp_data.RData"))
-
+load(here("data", "otp_cycling.RData"))
 lib_names <- unique(otp_data$from)
 
 # Lower Bound (walking) ---------------------------------------------------
@@ -44,8 +44,6 @@ for (i in 1:1000) {
 
 # Lower Bound (w/ Cycling) ------------------------------------------------
 
-load(here("data", "otp_cycling.RData"))
-
 min_cycling_matrix <- matrix(NA, 17, 17)
 
 for (i in 1:17) {
@@ -58,4 +56,18 @@ for (i in 1:17) {
   }
 }
 
-# min cycling times are exactly the same...
+min_cycling <- ATSP(min_cycling_matrix, labels = lib_names)
+
+best_cycling_tour <- NULL
+best_cycling_time <- Inf
+
+for (i in 1:1000) {
+  current_tour <- solve_TSP(min_cycling)
+  current_time <- tour_length(current_tour)
+  if (current_time < best_time) {
+    best_cycling_time <- current_time
+    best_cycling_tour <- current_tour
+  }
+}
+
+# Lower bound of 6.25 hours. Clearly better (now)
